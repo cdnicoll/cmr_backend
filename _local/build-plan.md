@@ -237,30 +237,9 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 
 ---
 
-### Phase 9: Tasks and Job Monitoring (Optional)
+### ~~Phase 9: Tasks and Job Monitoring~~ ELIMINATED
 
-**What is being built**
-
-- Generic job status: `GET /jobs/{id}`, list, cancel
-- Integration: insight/graphiti/content tasks return job IDs; clients can poll jobs API
-- Cancel support for running Modal jobs (if Modal supports revocation)
-
-**Why at this point**
-
-Operational/debugging support. Starter already has `GET /jobs`, `GET /jobs/{id}`. This phase extends for CMR-specific job types and ensures resource endpoints return consistent job IDs.
-
-**Domains included**
-
-- Tasks (adapted for Modal)
-
-**Complexity**
-
-Small. Most exists; mainly alignment and any cancel semantics.
-
-**Open questions / decisions**
-
-1. **Modal task revocation:** Can running Modal functions be cancelled? If not, document limitation.
-2. **Scope:** If starter jobs API is sufficient, this phase may be minimal or skipped.
+**Decision:** The starter's existing jobs API (`GET /jobs`, `GET /jobs/{id}`) is sufficient as-is. With Phases 6 and 7 eliminated and the pipeline running through `pipeline_stage` on the resource record, there is nothing CMR-specific to add here.
 
 ---
 

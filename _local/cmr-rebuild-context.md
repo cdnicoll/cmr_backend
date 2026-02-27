@@ -26,13 +26,13 @@ Rebuilding the **CMR (Content Mining & Research)** application — a mining indu
 
 Extract knowledge from both apps before writing a single line of new code.
 
-**For App 1**, Cursor was used in Agent mode to generate intent-focused domain documentation saved to `/_local/sdg_domains/`. These docs capture what each part of the system does, why it exists, and what business logic must be preserved — not how the code works. Output included a domain overview (`overview.md`), per-domain files (in `domains/`), a pain points file, a desired-changes file, and a resource extraction planning doc.
+**For App 1**, Cursor was used in Agent mode to generate intent-focused domain documentation saved to `/_local/domain_findings/`. These docs capture what each part of the system does, why it exists, and what business logic must be preserved — not how the code works. Output included a domain overview (`overview.md`), per-domain files (in `domains/`), a pain points file, a desired-changes file, and a resource extraction planning doc.
 
 **For App 2**, Cursor was used to generate starter-kit style architecture docs saved to `/_local/starter-kit/`. These docs capture how the modern stack is wired together — patterns, conventions, data layer, auth, Modal jobs, and project structure — written as a blueprint for building new features consistently.
 
 ### Phase 2: Build Plan
 
-With both sets of docs in place, Cursor analyzed `/_local/sdg_domains/` and `/_local/starter-kit/` together and produced `/_local/build-plan.md` — a dependency-ordered, phased plan for rebuilding the app. The plan has 9 phases, covers stack migration decisions, surfaces open questions per phase, and includes a dependency graph.
+With both sets of docs in place, Cursor analyzed `/_local/domain_findings/` and `/_local/starter-kit/` together and produced `/_local/build-plan.md` — a dependency-ordered, phased plan for rebuilding the app. The plan has 9 phases, covers stack migration decisions, surfaces open questions per phase, and includes a dependency graph.
 
 ### Phase 3: Incremental Specs and Build
 
@@ -42,19 +42,19 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 
 ## The Build Plan Summary
 
-| Phase | Name | Complexity |
-|-------|------|------------|
-| 1 | Foundation — Resources and Auth | Medium |
-| 2 | Scraping — Crawl4AI Integration | Medium–Large |
-| 3 | Insights — AI Extraction | Large |
-| 4 | Knowledge Graph — Graphiti Ingestion | Medium |
-| 5 | Content Discovery — Sitemap and RSS | Medium |
-| 6 | Trends — Multi-Agent Analysis | Large |
-| 7 | Content Generation | Large |
-| 8 | Pipeline Orchestration and Recovery | Medium |
-| 9 | Tasks and Job Monitoring | Small |
+| Phase | Name | Complexity | Status |
+|-------|------|------------|--------|
+| 1 | Foundation — Resources and Auth | Medium | Active |
+| 2 | Scraping — Crawl4AI Integration | Medium–Large | Active |
+| 3 | Insights — AI Extraction | Large | Active |
+| 4 | Knowledge Graph — Graphiti Ingestion | Medium | Active |
+| 5 | Content Discovery — Sitemap and RSS | Medium | Active |
+| 6 | Trends — Multi-Agent Analysis | — | **Eliminated** |
+| 7 | Content Generation | — | **Eliminated** |
+| 8 | Pipeline Orchestration and Recovery | Medium | Active |
+| 9 | Tasks and Job Monitoring | — | **Eliminated** |
 
-Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Graph (4) → Trends (6) and Content Generation (7), with Orchestration (8) tying it all together.
+Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Graph (4), with Orchestration (8) tying it all together. The backend's responsibility ends at Phase 4 — getting clean, structured data into the knowledge graph. Trend analysis and content generation are handled outside the backend by an LLM client connected directly to the Neo4j MCP server.
 
 ---
 
@@ -73,7 +73,27 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 
 ## Resolved Decisions
 
-**Auth model:** Use the starter kit's Supabase JWT auth as-is. No API key system. All callers including cron and scheduled Modal functions will authenticate using a dedicated service account JWT stored as a Modal secret. No changes needed to the starter's existing auth implementation.
+| Decision | Resolution |
+|----------|------------|
+| **Auth model** | Supabase JWT as-is. No API key system. Cron and Modal functions use a service account JWT stored as a Modal secret. |
+| **Pipeline state** | Single `pipeline_stage` column on `resource`. Values: `discovered`, `scraping`, `scraped`, `extracting`, `extracted`, `ingesting`, `complete`, `failed`. Introduced in Phase 1. |
+| **`scrape` flag** | Dropped. Eligibility derived from `pipeline_stage` (`discovered` = eligible). |
+| **Crawl4AI usage** | Python library, running inside the existing `browser` tier Modal function. |
+| **Raw content storage** | JSONB column on the `resource` row. |
+| **Scrape trigger** | No manual trigger endpoint. Modal function invoked directly via CLI/dashboard or spawned by discovery. |
+| **Alignment score** | Omitted. Never implemented in legacy; not needed. |
+| **Retry strategy** | Modal-level retries only. No retry logic inside agents. |
+| **Model config** | Per-task env vars: `MODEL_INSIGHT_EXTRACTION`, `MODEL_TRENDS` (n/a), `MODEL_CONTENT_GENERATION` (n/a), `MODEL_FACT_CHECK` (n/a). |
+| **Neo4j hosting** | Neo4j Aura. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add to Modal secrets. |
+| **Episode length** | Phase 3 agent produces atomic outputs naturally. Phase 4 adds `MAX_EPISODE_LENGTH` env var (default 500 chars) as a safety net. |
+| **Sitemap config** | Stored in a `sitemap_sources` Supabase table (not a flat file). Migration script in Phase 5. |
+| **Discovery → scrape handoff** | Batch: collect all new resources, deduplicate, then spawn scrape jobs for net-new only. |
+| **Failed resource retry** | Manual re-queue only. `failure_reason` stored on resource record (error type + message). No automatic retries — blocked sites would loop forever. |
+| **Cleanup tasks** | Removed. Never implemented in legacy; no equivalent in Modal architecture. |
+| **Job cancellation** | Not needed via API. Modal timeouts handle runaway jobs; manual cancellation available via Modal dashboard. |
+| **Trends system** | **Eliminated from backend.** Replaced by LLM client connected directly to Neo4j MCP server. |
+| **Content generation** | **Eliminated from backend.** Handled by the same LLM client via Neo4j MCP. |
+| **Jobs API (Phase 9)** | **Eliminated.** Starter's existing `GET /jobs` and `GET /jobs/{id}` are sufficient as-is. |
 
 ---
 
@@ -81,7 +101,7 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 
 ```
 /_local/
-  sdg_domains/                         # App 1 intent/domain documentation (generated)
+  domain_findings/                         # App 1 intent/domain documentation (generated)
     overview.md                        # High-level app summary and domain index
     pain-points.md                     # Tech debt, inconsistencies, ambiguities
     desired-changes.md                 # Intent-only notes on changes to pursue later
@@ -124,7 +144,7 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 ## Prompts Used
 
 ### App 1 — Domain Documentation Prompt
-Run in Cursor Agent mode against the legacy codebase. Generates intent-focused domain docs to `/_local/sdg_domains/`.
+Run in Cursor Agent mode against the legacy codebase. Generates intent-focused domain docs to `/_local/domain_findings/`.
 
 ```
 You are a technical documentation assistant. Your job is to analyze this codebase and produce a set of intent-focused domain documentation files. The goal is NOT to document the code itself — it is to capture what the application does, why each part exists, and what problems it solves. This documentation will be used to inform a future rewrite, so focus on behavior, purpose, and business logic over implementation details.
@@ -135,7 +155,7 @@ Do the following:
 
 2. **Identify the core domains.** Group the application into logical domains or feature areas (e.g. authentication, user management, data processing, reporting, etc.). List these domains and confirm your understanding before proceeding.
 
-3. **For each domain, create a markdown file** saved to a `/_local/sdg_domains/` folder. Each file should cover:
+3. **For each domain, create a markdown file** saved to a `/_local/domain_findings/` folder. Each file should cover:
    - **Purpose** — What is this domain responsible for? Why does it exist?
    - **Core behavior** — What does it actually do? Walk through the key flows and logic in plain language.
    - **Key data** — What data does it work with? What are the important entities, fields, or states?
@@ -143,14 +163,14 @@ Do the following:
    - **Edge cases and notable logic** — Any non-obvious rules, special handling, or gotchas baked into the code.
    - **What to preserve** — Based on what you see, what intent or behavior seems important to carry forward in a rewrite?
 
-4. **Create a root overview file** at `/_local/sdg_domains/overview.md` that covers:
+4. **Create a root overview file** at `/_local/domain_findings/overview.md` that covers:
    - What the application does at a high level
    - The full list of identified domains with a one-line summary of each
    - The overall data flow or architecture in plain language
    - Tech stack inventory (frameworks, key libraries, database, APIs, etc.)
    - Any patterns or conventions used throughout the codebase
 
-5. **Create a pain points file** at `/_local/sdg_domains/pain-points.md` that captures:
+5. **Create a pain points file** at `/_local/domain_findings/pain-points.md` that captures:
    - Areas of the code that appear overly complex, inconsistent, or hard to follow
    - Any patterns that seem like they were workarounds or tech debt
    - Places where the intent is unclear even after reading the code
@@ -227,18 +247,18 @@ Write everything as if you are producing a reference guide for a developer start
 ---
 
 ### Build Plan Prompt
-Run in Cursor Agent mode with access to both `/_local/sdg_domains/` and `/_local/starter-kit/`. Generates `/_local/build-plan.md`.
+Run in Cursor Agent mode with access to both `/_local/domain_findings/` and `/_local/starter-kit/`. Generates `/_local/build-plan.md`.
 
 ```
 You are a technical planning assistant. Your job is to analyze the existing domain documentation for a legacy application and produce a phased build plan for rebuilding it as a new application using a modern starter kit.
 
 You have access to two sets of documents:
-- `/_local/sdg_domains/` — domain documentation for the legacy app, describing what each part of the system does, its intent, and its business logic
+- `/_local/domain_findings/` — domain documentation for the legacy app, describing what each part of the system does, its intent, and its business logic
 - `/_local/starter-kit/` — architecture documentation for the new starter app, describing its stack, patterns, and conventions
 
 Do the following:
 
-1. **Read all files in `/_local/sdg_domains/`** thoroughly before proceeding. Understand the full scope of the legacy app — every domain, every feature area, every major piece of functionality.
+1. **Read all files in `/_local/domain_findings/`** thoroughly before proceeding. Understand the full scope of the legacy app — every domain, every feature area, every major piece of functionality.
 
 2. **Read all files in `/_local/starter-kit/`** to understand what already exists in the new app — the stack, patterns, data layer, auth, and Modal job conventions.
 
@@ -270,35 +290,27 @@ Write the plan as if it will be handed to a developer who will use it to write o
 
 ## Current Status
 
-The build plan has been generated at `/_local/build-plan.md`. It is AI-generated and needs to be audited before any specs are written.
+**The build plan has been fully audited and all open questions resolved.** Every decision is annotated directly in `/_local/build-plan.md`. The plan is locked and ready for spec generation.
+
+Key outcomes from the audit:
+- Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
+- The backend's responsibility ends at Phase 4: getting clean, structured data into the knowledge graph
+- The active build sequence is: **Phase 1 → 2 → 3 → 4 → 5 → 8**
+- All architectural decisions are resolved (see Resolved Decisions table above)
 
 ---
 
-## Next Step: Audit the Build Plan
+## Next Step: Generate Specs and Build
 
-Before generating any specs, go through `/_local/build-plan.md` and validate it. The goal is to make sure the plan reflects reality — not just what the AI inferred from the docs.
+The build plan is locked. For each active phase, the rhythm is:
 
-Work through each phase and ask:
-
-- Does the scope of this phase feel right, or is it too large / too small?
-- Are the dependencies correct — does this phase actually need everything listed before it?
-- Are the open questions still open, or have some already been decided? (Auth is already resolved.)
-- Is anything missing that you know needs to be built?
-- Is anything included that shouldn't be, or that belongs in a different phase?
-- Does the complexity rating (small / medium / large) match your gut feel?
-- Are the deferred items genuinely deferred, or do any of them actually belong in the initial build?
-
-Annotate the build plan directly as you go. When the audit is complete and you're satisfied the plan reflects the real scope and sequence, that's when spec generation begins.
-
----
-
-## After the Audit: Generating Specs
-
-Once the build plan is locked, for each phase the rhythm is:
-
-1. **Resolve all open questions** for that phase before writing the spec
-2. **Generate the spec** in Cursor using a prompt that references:
+1. **Generate the spec** using a prompt that references:
    - The relevant phase section from `/_local/build-plan.md`
-   - The relevant domain file(s) from `/_local/sdg_domains/`
+   - The relevant domain file(s) from `/_local/domain_findings/domains/`
    - `/_local/starter-kit/patterns.md`
-3. **Build task by task** in Cursor Agent mode using the spec as a checklist
+2. **Build task by task** in Cursor Agent mode using the spec as a checklist
+3. **Update `/_local/build-plan.md`** if scope or sequencing changes during the build
+
+Active phases in order: **1 → 2 → 3 → 4 → 5 → 8**
+
+Start with Phase 1: Foundation — Resources and Auth.
