@@ -192,67 +192,19 @@ Medium. Filter pipeline and deduplication are well-specified. RSS auto-discovery
 **Open questions / decisions**
 
 1. ~~**Config source:** Legacy uses `sitemap_sources.json`; decide location and env overrides.~~ **RESOLVED:** Store sitemap/RSS sources in a Supabase `sitemap_sources` table (not a flat file). Include a migration script in Phase 5. This allows sources to be added/updated without a deploy.
-2. **Discovery → scrape handoff:** Spawn scrape for each new resource, or batch? Resource extraction planning suggests per-resource spawn to avoid blocking.
+2. ~~**Discovery → scrape handoff:** Spawn scrape for each new resource, or batch? Resource extraction planning suggests per-resource spawn to avoid blocking.~~ **RESOLVED:** Collect all new resources first, deduplicate against existing, then batch spawn scrape jobs for net-new resources only. Modal handles parallel spawning cleanly.
 
 ---
 
-### Phase 6: Trends — Multi-Agent Analysis
+### ~~Phase 6: Trends — Multi-Agent Analysis~~ ELIMINATED
 
-**What is being built**
-
-- Trends multi-agent system: query planner, data retrieval, supervisor
-- Knowledge graph as primary source; optional external data
-- `POST /api/v1/trends/chat` (HTTP)
-- `WS /api/v1/trends/ws/{session_id}` (WebSocket with progress, heartbeat)
-- `only_use_knowledge_graph` config for graph-only responses
-
-**Why at this point**
-
-Trends is a leaf consumer of the knowledge graph. No dependencies on other CMR domains.
-
-**Domains included**
-
-- Trends
-
-**Complexity**
-
-Large. Multi-agent architecture, WebSocket streaming, and optional external data add complexity. Health check for supervisor/agents/graph should be included.
-
-**Open questions / decisions**
-
-1. **External data:** Legacy supports ~20% external market data. Decide: implement in Phase 6 or defer for graph-only mode first.
-2. **Auth:** Optional auth for `/trends/health`; required for chat. Align with Phase 1 auth decision.
+**Decision:** The multi-agent trends system and all chat endpoints (`POST /api/v1/trends/chat`, `WS /api/v1/trends/ws/{session_id}`) have been removed from the backend scope. Trend analysis will be handled by connecting an LLM directly to the Neo4j MCP server. The CMR backend's responsibility ends at Phase 4 — getting clean, structured data into the knowledge graph.
 
 ---
 
-### Phase 7: Content Generation
+### ~~Phase 7: Content Generation~~ ELIMINATED
 
-**What is being built**
-
-- Content generation pipeline: Neo4j intelligence → generation → fact-check
-- Content types: blog, newsletter, social, report
-- `POST /api/v1/trend-analysis/content` (or consistent path)
-- Pending record before queue (race fix)
-- Modal job for generation; poll `GET /jobs/{id}` for status/result
-- Persona service (optional; fallback to default on failure)
-
-**Why at this point**
-
-Content generation is a leaf consumer of the knowledge graph. Can be built in parallel with Trends but sequenced after for clarity.
-
-**Domains included**
-
-- Content Generation
-
-**Complexity**
-
-Large. Multi-step pipeline, fact-check agent, and entity selection as required input. Reuse existing jobs API for status/result.
-
-**Open questions / decisions**
-
-1. **Route path:** Legacy uses `/trend-analysis/content`; consider `/content` or `/content/generate` for consistency.
-2. **Persona webhook:** Implement or defer; silent fallback may hide integration issues.
-3. ~~**Model config:** `MODEL_CONTENT_GENERATION` env var.~~ **RESOLVED:** Per-task env vars — `MODEL_CONTENT_GENERATION` and `MODEL_FACT_CHECK`. See Phase 3 resolution.
+**Decision:** Content generation has been removed from the backend scope. Blog posts, newsletters, social posts, and reports are all LLM tasks that the frontend LLM client can handle directly using Neo4j MCP access — the same approach as Trends. No backend content generation endpoints needed.
 
 ---
 
@@ -280,8 +232,8 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 
 **Open questions / decisions**
 
-1. **Failed resource retry:** Manual re-queue vs periodic job that resets `failed` → `discovered`?
-2. **Cleanup:** Legacy has placeholder `cleanup_completed_*_tasks`. Implement or remove.
+1. ~~**Failed resource retry:** Manual re-queue vs periodic job that resets `failed` → `discovered`?~~ **RESOLVED:** Manual re-queue only. Automatic retries risk hammering sites that have blocked Crawl4AI. A human should investigate the failure reason before deciding to retry. The resource record must store `failure_reason` (error type + message) so failed resources are actionable — not just a list of unknowns. Phase 1 should include `failure_reason` on the resource schema from the start.
+2. ~~**Cleanup:** Legacy has placeholder `cleanup_completed_*_tasks`. Implement or remove.~~ **RESOLVED:** Remove entirely. Never implemented in legacy; no equivalent concern in the Modal architecture.
 
 ---
 
@@ -330,17 +282,14 @@ Small. Most exists; mainly alignment and any cancel semantics.
 ## Dependency Summary
 
 ```
-Phase 1 (Foundation)     → Phase 2 (Scraping) → Phase 3 (Insights) → Phase 4 (Knowledge Graph)
-     │                            │                    │                        │
-     │                            │                    │                        ├──→ Phase 6 (Trends)
-     │                            │                    │                        └──→ Phase 7 (Content Gen)
-     │                            │                    │
-     └────────────────────────────┴────────────────────┴──→ Phase 5 (Discovery) → Phase 8 (Orchestration)
-                                                                                          │
-                                                                                          └──→ Phase 9 (Tasks)
+Phase 1 (Foundation) → Phase 2 (Scraping) → Phase 3 (Insights) → Phase 4 (Knowledge Graph)
+     │                       │                    │
+     └───────────────────────┴────────────────────┴──→ Phase 5 (Discovery) → Phase 8 (Orchestration)
+                                                                                      │
+                                                                                      └──→ Phase 9 (Tasks)
 ```
 
-No circular dependencies. Phase 5 (Discovery) depends on Phase 1 (Resources) and the scrape spawn path from Phase 2. Phase 8 wires the full pipeline after all stages exist.
+No circular dependencies. Phases 6 (Trends) and 7 (Content Generation) have been eliminated — both are handled outside the backend via LLM + Neo4j MCP server. The backend's responsibility ends at Phase 4. Phase 5 (Discovery) depends on Phase 1 (Resources) and the scrape spawn path from Phase 2. Phase 8 wires the full pipeline after all stages exist.
 
 ---
 
