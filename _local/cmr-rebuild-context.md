@@ -58,6 +58,31 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 
 ---
 
+## Terminology
+
+| Term | Definition |
+|------|------------|
+| **discovery_source** | A monitored source the system checks on a schedule for new content. Has a `source_type`: `sitemap` (XML sitemap URL), `rss` (RSS feed URL), or `youtube_channel` (YouTube channel URL). |
+| **resource** | A single piece of content extracted from a discovery source — either a web article URL or a YouTube video URL. The atomic unit of the entire pipeline. |
+| **pipeline** | The ordered processing workflow a resource moves through, tracked by `pipeline_stage`: `discovered → scraping → scraped → extracting → extracted → ingesting → complete / failed`. |
+| **discovery** | The process of scanning `discovery_sources` to find new URLs and registering them as resources. Upstream of the pipeline — it feeds it. |
+
+## Data Model
+
+**Supabase (Postgres) — operational layer**
+
+| Table | Purpose |
+|-------|---------|
+| `discovery_sources` | Sources to monitor — sitemaps, RSS feeds, YouTube channels |
+| `resources` | Content units with full pipeline lifecycle, scraped content, and insight data |
+| `jobs` | Modal job tracking (exists in starter) |
+
+**Neo4j — intelligence layer**
+
+The knowledge graph built from ingested insights. Entities, relationships, and facts extracted from resources. This is what the LLM client queries via MCP.
+
+---
+
 ## Key Stack Migration Decisions
 
 | Concern | Legacy | New |
@@ -86,7 +111,7 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 | **Model config** | Per-task env vars: `MODEL_INSIGHT_EXTRACTION`, `MODEL_TRENDS` (n/a), `MODEL_CONTENT_GENERATION` (n/a), `MODEL_FACT_CHECK` (n/a). |
 | **Neo4j hosting** | Neo4j Aura. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add to Modal secrets. |
 | **Episode length** | Phase 3 agent produces atomic outputs naturally. Phase 4 adds `MAX_EPISODE_LENGTH` env var (default 500 chars) as a safety net. |
-| **Sitemap config** | Stored in a `sitemap_sources` Supabase table (not a flat file). Migration script in Phase 5. |
+| **Discovery sources config** | Stored in a `discovery_sources` Supabase table with `source_type` column: `sitemap`, `rss`, `youtube_channel`. Replaces legacy flat file. Migration script in Phase 5. |
 | **Discovery → scrape handoff** | Batch: collect all new resources, deduplicate, then spawn scrape jobs for net-new only. |
 | **Failed resource retry** | Manual re-queue only. `failure_reason` stored on resource record (error type + message). No automatic retries — blocked sites would loop forever. |
 | **Cleanup tasks** | Removed. Never implemented in legacy; no equivalent in Modal architecture. |

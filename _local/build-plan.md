@@ -74,6 +74,16 @@ Medium. URL validation and batch semantics are well-documented.
 2. ~~**Resource schema:** Legacy has `job_id`, `insight_status`, `graphiti_status`. New design uses `pipeline_stage`. Phase 1 can introduce `pipeline_stage` from the start (values: `discovered`, `scraping`, `scraped`, etc.) or start minimal and add in Phase 2.~~ **RESOLVED:** Introduce `pipeline_stage` in Phase 1 from the start. Values: `discovered`, `scraping`, `scraped`, `extracting`, `extracted`, `ingesting`, `complete`, `failed`.
 3. ~~**`scrape` flag:** Legacy has `scrape` (bool) for eligibility. Confirm whether to keep or derive from `pipeline_stage`.~~ **RESOLVED:** Drop the `scrape` flag. Eligibility is derived from `pipeline_stage` — anything in `discovered` is eligible to scrape.
 
+**How to test**
+
+- `GET /health` and `GET /health/db` return 200
+- `POST /api/v1/resources` with a valid URL returns 201 and the resource appears in Supabase with `pipeline_stage = discovered`
+- `POST /api/v1/resources` with the same URL again returns 200 (skipped, no duplicate created)
+- `POST /api/v1/resources` with an invalid or SSRF URL returns 422
+- `POST /api/v1/resources` with a YouTube URL is detected as type `youtube`
+- Query Supabase directly to confirm the `resource` table schema matches spec (including `pipeline_stage`, `failure_reason`)
+- Hit a protected endpoint without a JWT — confirm 401
+
 ---
 
 ### Phase 2: Scraping — Crawl4AI Integration
@@ -102,6 +112,14 @@ Medium–large. Crawl4AI replaces Apify; YouTube vs website routing must be pres
 1. ~~**Crawl4AI API:** Confirm Crawl4AI client usage (library vs self-hosted vs SaaS) and configuration.~~ **RESOLVED:** Use Crawl4AI as a Python library, running inside the existing `browser` tier Modal function (`process_browser_job`). The starter already defines this tier for `web_crawl` jobs (2 CPU, 2GB, 5min timeout, `browser_image`).
 2. ~~**Content storage:** Where to store raw content — JSONB on `resource`, or separate table? Legacy stores on resource; preserve unless there are size limits.~~ **RESOLVED:** Store raw scraped content as a JSONB column on the `resource` row. Simple and co-located; revisit only if size becomes a problem.
 3. ~~**Trigger:** In the new design, discovery spawns scrape directly. Phase 2 can implement a manual trigger (`POST /resources/scrape` for eligible resources) first, then wire to discovery in Phase 5.~~ **RESOLVED:** No manual trigger endpoint needed. The scrape Modal function is the trigger — it can be invoked directly via Modal CLI/dashboard at any time. Phase 2 builds the worker; Phase 5 wires discovery to spawn it.
+
+**How to test**
+
+- In the Modal dashboard, spawn the scrape worker with a known `resource_id` (a resource in `discovered` stage)
+- Confirm the resource transitions: `discovered` → `scraping` → `scraped` in Supabase
+- Confirm the `scraped_content` JSONB column is populated on the resource row
+- Repeat with a YouTube URL — confirm YouTube extraction path runs correctly
+- Spawn the worker against a URL known to block scrapers — confirm `pipeline_stage = failed` and `failure_reason` is populated
 
 ---
 
@@ -134,6 +152,14 @@ Large. Agent design, retry logic, content validation (min length), and failure h
 2. ~~**Retry strategy:** Legacy embeds JSON retries in agent. Prefer Modal retries + cleaner agent code.~~ **RESOLVED:** Use Modal-level retries. No retry logic inside the agent itself.
 3. ~~**Model config:** Use `MODEL_INSIGHT_EXTRACTION` env var per desired-changes.~~ **RESOLVED:** Per-task env vars for all model config across the app. Each task gets its own env var: `MODEL_INSIGHT_EXTRACTION` (Phase 3), `MODEL_TRENDS` (Phase 6), `MODEL_CONTENT_GENERATION` and `MODEL_FACT_CHECK` (Phase 7). No global default — each must be explicitly set.
 
+**How to test**
+
+- In the Modal dashboard, spawn the insight extraction worker with a known `resource_id` (a resource in `scraped` stage)
+- Confirm the resource transitions: `scraped` → `extracting` → `extracted` in Supabase
+- Confirm the `insight` JSONB column is populated with entities, relationships, and scores
+- Inspect the insight structure — confirm no `alignment` field is present
+- Spawn against a resource with very short scraped content — confirm it fails gracefully with `failure_reason` populated
+
 ---
 
 ### Phase 4: Knowledge Graph — Graphiti Ingestion
@@ -163,18 +189,28 @@ Medium. Sequential ingestion and episode size constraints are documented. Connec
 1. ~~**Neo4j/Graphiti hosting:** Confirm connection details and credentials (Infisical/Modal secrets).~~ **RESOLVED:** Neo4j Aura already provisioned. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add these to the Modal secrets for the worker app.
 2. ~~**Episode validation:** Enforce <400 chars in code to avoid Graphiti LLM overflow.~~ **RESOLVED:** Two-layer approach: (1) Phase 3 insight extraction agent produces atomic, structured outputs (one entity/relationship/fact per insight) which naturally keeps episodes short; (2) Phase 4 adds a configurable `MAX_EPISODE_LENGTH` env var (default: 500 chars) with a validation/truncation step before ingestion as a safety net. Tune the limit after testing against the live Graphiti instance.
 
+**How to test**
+
+- In the Modal dashboard, spawn the Graphiti ingestion worker with a known `resource_id` (a resource in `extracted` stage)
+- Confirm the resource transitions: `extracted` → `ingesting` → `complete` in Supabase
+- Open the Neo4j Aura console and verify nodes and relationships were created from the ingested episodes
+- Confirm episodes are within the `MAX_EPISODE_LENGTH` limit (check truncation logic fired if needed)
+- Spawn against a resource with no insight data — confirm graceful failure with `failure_reason`
+
 ---
 
-### Phase 5: Content Discovery — Sitemap and RSS
+### Phase 5: Content Discovery — Sitemap, RSS, and YouTube
 
 **What is being built**
 
-- Sitemap scanner: parse sitemaps, filter by date/relevance/domain rules, deduplicate
-- RSS support: parse feeds (explicit `known_rss_feeds`; auto-discovery deferred)
-- Modal scheduled function (daily): runs discovery, submits URLs to `POST /resources`, spawns scrape for each new resource
+- `discovery_sources` Supabase table + migration script — stores all monitored sources with a `source_type` column: `sitemap`, `rss`, `youtube_channel`
+- Sitemap scanner: parse XML sitemaps, filter by date/relevance/domain rules, deduplicate
+- RSS scanner: parse feeds from `rss` entries in `discovery_sources` (auto-discovery deferred)
+- YouTube channel scanner: fetch latest videos from a channel, extract video URLs as resources
+- Modal scheduled function (daily): runs all three scanners, submits new URLs to `POST /resources`, batch spawns scrape jobs for net-new resources
 - URL filtering: `days_back`, `min_relevance_score`, path patterns, `require_https`
 - Dry-run mode for testing
-- `sitemap_sources` Supabase table + migration script (replaces `sitemap_sources.json`)
+- `discovery_sources` Supabase table + migration script (replaces `discovery_sources.json`)
 
 **Why at this point**
 
@@ -191,8 +227,17 @@ Medium. Filter pipeline and deduplication are well-specified. RSS auto-discovery
 
 **Open questions / decisions**
 
-1. ~~**Config source:** Legacy uses `sitemap_sources.json`; decide location and env overrides.~~ **RESOLVED:** Store sitemap/RSS sources in a Supabase `sitemap_sources` table (not a flat file). Include a migration script in Phase 5. This allows sources to be added/updated without a deploy.
+1. ~~**Config source:** Legacy uses `discovery_sources.json`; decide location and env overrides.~~ **RESOLVED:** Store all discovery sources in a Supabase `discovery_sources` table with a `source_type` column (`sitemap`, `rss`, `youtube_channel`). Replaces the legacy flat file. Include a migration script in Phase 5. Sources can be added/updated without a deploy.
 2. ~~**Discovery → scrape handoff:** Spawn scrape for each new resource, or batch? Resource extraction planning suggests per-resource spawn to avoid blocking.~~ **RESOLVED:** Collect all new resources first, deduplicate against existing, then batch spawn scrape jobs for net-new resources only. Modal handles parallel spawning cleanly.
+
+**How to test**
+
+- Confirm the `discovery_sources` table exists in Supabase after the migration script runs
+- Insert one row of each `source_type` (`sitemap`, `rss`, `youtube_channel`) into `discovery_sources` directly in Supabase
+- In the Modal dashboard, trigger the discovery function manually (dry-run mode first) — confirm it reads from the table and logs what it would create for each source type
+- Run discovery for real — confirm new resources appear in Supabase with `pipeline_stage = discovered` for both URL and YouTube video URL types
+- Confirm duplicate URLs are skipped (run discovery twice — no duplicate resources created)
+- Confirm scrape jobs are batch-spawned for net-new resources after discovery completes
 
 ---
 
@@ -234,6 +279,14 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 
 1. ~~**Failed resource retry:** Manual re-queue vs periodic job that resets `failed` → `discovered`?~~ **RESOLVED:** Manual re-queue only. Automatic retries risk hammering sites that have blocked Crawl4AI. A human should investigate the failure reason before deciding to retry. The resource record must store `failure_reason` (error type + message) so failed resources are actionable — not just a list of unknowns. Phase 1 should include `failure_reason` on the resource schema from the start.
 2. ~~**Cleanup:** Legacy has placeholder `cleanup_completed_*_tasks`. Implement or remove.~~ **RESOLVED:** Remove entirely. Never implemented in legacy; no equivalent concern in the Modal architecture.
+
+**How to test**
+
+- Trigger the full pipeline end-to-end: insert a source into `discovery_sources`, run discovery, confirm resources flow through all `pipeline_stage` values to `complete` and appear in Neo4j
+- Simulate a stuck resource (manually set `pipeline_stage = scraping` with an old `updated_at`) — confirm the recovery worker resets it to `failed` with a timeout reason
+- Manually re-queue a failed resource (reset `pipeline_stage = discovered`) — confirm it re-enters the pipeline correctly
+- Confirm resources stuck in `extracting` or `ingesting` are also caught by the recovery worker
+- Check the Modal dashboard — confirm all scheduled functions (discovery, recovery) are registered and firing on their expected schedules
 
 ---
 
