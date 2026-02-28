@@ -5,6 +5,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-26
 ## Active Technologies
 - Python 3.11+ + FastAPI, Supabase, Pydantic, pydantic-settings (per starter) (002-foundation)
 - Supabase (PostgreSQL) — `resource` table via Supabase client or asyncpg (002-foundation)
+- Python 3.11+ + Crawl4AI, Supabase, Modal, asyncpg (per starter) (003-scraping)
+- Supabase (PostgreSQL) — `resources` table; `scraped_content` JSONB column (existing from Phase 1) (003-scraping)
 
 - Python 3.11+ + FastAPI, uvicorn, supabase, modal, pyjwt, cryptography, sqlalchemy, asyncpg, pydantic, pydantic-settings, httpx, python-dotenv (001-starter-application)
 
@@ -24,6 +26,7 @@ cd src && pytest && ruff check .
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 003-scraping: Added Python 3.11+ + Crawl4AI, Supabase, Modal, asyncpg (per starter)
 - 002-foundation: Added Python 3.11+ + FastAPI, Supabase, Pydantic, pydantic-settings (per starter)
 
 - 001-starter-application: Added Python 3.11+ + FastAPI, uvicorn, supabase, modal, pyjwt, cryptography, sqlalchemy, asyncpg, pydantic, pydantic-settings, httpx, python-dotenv
