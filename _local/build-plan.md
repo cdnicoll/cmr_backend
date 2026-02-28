@@ -94,6 +94,7 @@ Medium. URL validation and batch semantics are well-documented.
 - Modal scraping function: accepts `resource_id`, fetches content, stores on resource
 - `pipeline_stage` transitions: `discovered` → `scraping` → `scraped`
 - Removal of Apify, `jobs` table for scraping, and status polling
+- `max_containers = 8` on `scrape_resource` — Modal queues excess spawns automatically (see Phase 2b)
 
 **Why at this point**
 
@@ -120,6 +121,44 @@ Medium–large. Crawl4AI replaces Apify; YouTube vs website routing must be pres
 - Confirm the `scraped_content` JSONB column is populated on the resource row
 - Repeat with a YouTube URL — confirm YouTube extraction path runs correctly
 - Spawn the worker against a URL known to block scrapers — confirm `pipeline_stage = failed` and `failure_reason` is populated
+
+---
+
+### Phase 2b: YouTube Scraping
+
+**What is being built**
+
+- YouTube transcript extraction using `youtube-transcript-api` (Crawl4AI does not support YouTube)
+- Extend the existing `scrape_resource` Modal function to route `type = youtube` resources to the YouTube extraction path
+- Same `pipeline_stage` transitions as Phase 2: `discovered` → `scraping` → `scraped` (or `failed`)
+- Same `scraped_content` JSONB structure — transcript stored as `markdown`, `metadata.type = youtube`
+- Handle videos with disabled or unavailable captions → `pipeline_stage = failed`, `failure_reason` populated
+- Minimum content length check (same `SCRAPE_MIN_WORD_COUNT` threshold as Phase 2)
+
+**Why at this point**
+
+Phase 2 established the scraping pattern and `scraped_content` schema for websites. YouTube extraction uses a different library (no browser required — `youtube-transcript-api` fetches captions directly) but follows the identical worker pattern. Phase 3 (Insights) requires all resource types to be scrapeable before it can run.
+
+**Domains included**
+
+- Scraping (YouTube path only)
+
+**Complexity**
+
+Small. The pattern is identical to Phase 2; only the extraction library differs. No new tables, no new Modal functions — extends the existing `scrape_resource` worker.
+
+**Open questions / decisions**
+
+1. ~~**YouTube extraction library**~~ **RESOLVED:** Use `youtube-transcript-api`. Crawl4AI does not support YouTube. Fetches captions directly from YouTube's caption API — lightweight, no browser required, raises clear exceptions when captions are unavailable.
+2. ~~**Scrape worker concurrency**~~ **RESOLVED:** Set `max_containers = 8` on the `scrape_resource` Modal function. Modal queues spawns beyond 8 and processes them as containers free up. This controls cost, prevents hammering target sites, and reduces the risk of IP blocks. Applies to both website and YouTube scraping.
+
+**How to test**
+
+- Create a resource with a YouTube URL (`pipeline_stage = discovered`)
+- Spawn `scrape_resource` with the YouTube resource ID via Modal CLI/dashboard
+- Confirm `pipeline_stage = scraped` and `scraped_content.markdown` contains the transcript
+- Confirm `scraped_content.metadata.type = youtube`
+- Spawn against a YouTube video with disabled captions — confirm `pipeline_stage = failed` and `failure_reason` populated
 
 ---
 
@@ -314,14 +353,12 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 ## Dependency Summary
 
 ```
-Phase 1 (Foundation) → Phase 2 (Scraping) → Phase 3 (Insights) → Phase 4 (Knowledge Graph)
-     │                       │                    │
-     └───────────────────────┴────────────────────┴──→ Phase 5 (Discovery) → Phase 8 (Orchestration)
-                                                                                      │
-                                                                                      └──→ Phase 9 (Tasks)
+Phase 1 (Foundation) → Phase 2 (Website Scraping) → Phase 2b (YouTube Scraping) → Phase 3 (Insights) → Phase 4 (Knowledge Graph)
+     │                       │                              │                           │
+     └───────────────────────┴──────────────────────────────┴───────────────────────────┴──→ Phase 5 (Discovery) → Phase 8 (Orchestration)
 ```
 
-No circular dependencies. Phases 6 (Trends) and 7 (Content Generation) have been eliminated — both are handled outside the backend via LLM + Neo4j MCP server. The backend's responsibility ends at Phase 4. Phase 5 (Discovery) depends on Phase 1 (Resources) and the scrape spawn path from Phase 2. Phase 8 wires the full pipeline after all stages exist.
+No circular dependencies. Phases 6 (Trends) and 7 (Content Generation) have been eliminated — both are handled outside the backend via LLM + Neo4j MCP server. The backend's responsibility ends at Phase 4. Phase 2b must complete before Phase 3 (Insights) since the insight agent needs to handle all resource types. Phase 5 (Discovery) depends on Phase 1 (Resources) and the scrape spawn paths from Phase 2 and 2b. Phase 8 wires the full pipeline after all stages exist.
 
 ---
 

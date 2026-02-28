@@ -3,7 +3,7 @@
 One prompt per active phase. Run each prompt in Cursor Agent mode using spec-kit.
 Save output to `_local/specs/0{N}-{phase-name}/`.
 
-Active build sequence: **Phase 1 → 2 → 3 → 4 → 5 → 8**
+Active build sequence: **Phase 1 → 2 → 2b → 3 → 4 → 5 → 8**
 
 ---
 
@@ -35,6 +35,24 @@ Read the following files before creating the spec for Phase 2 only:
 - @_local/starter-kit/modal-jobs.md — for the Modal worker conventions and browser tier setup
 
 Create a spec for Phase 2: Scraping — Crawl4AI Integration only. Do not plan beyond this phase.
+```
+
+---
+
+## Phase 2b: YouTube Scraping
+
+```
+Read the following files before creating the spec for Phase 2b only:
+
+- @_local/build-plan.md — for the phase scope, decisions, and test checklist
+- @_local/domain_findings/domains/02-scraping.md — for the legacy YouTube handling logic to preserve
+- @_local/starter-kit/patterns.md — for how new features are structured in this codebase
+- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions
+- @specs/003-scraping/ — for the existing website scraping pattern this phase extends
+
+Phase 2b extends the existing `scrape_resource` Modal function to handle `type = youtube` resources using `youtube-transcript-api`. Crawl4AI does not support YouTube. The extraction path, `scraped_content` JSONB schema, `pipeline_stage` transitions, and failure handling are identical to Phase 2 — only the extraction library differs. No new tables, no new Modal functions.
+
+Create a spec for Phase 2b: YouTube Scraping only. Do not plan beyond this phase.
 ```
 
 ---

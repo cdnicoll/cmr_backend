@@ -44,11 +44,12 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 
 | Phase | Name | Complexity | Status |
 |-------|------|------------|--------|
-| 1 | Foundation — Resources and Auth | Medium | Active |
-| 2 | Scraping — Crawl4AI Integration | Medium–Large | Active |
+| 1 | Foundation — Resources and Auth | Medium | Complete |
+| 2 | Scraping — Website (Crawl4AI) | Medium–Large | Complete |
+| 2b | Scraping — YouTube (youtube-transcript-api) | Small | Active |
 | 3 | Insights — AI Extraction | Large | Active |
 | 4 | Knowledge Graph — Graphiti Ingestion | Medium | Active |
-| 5 | Content Discovery — Sitemap and RSS | Medium | Active |
+| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Active |
 | 6 | Trends — Multi-Agent Analysis | — | **Eliminated** |
 | 7 | Content Generation | — | **Eliminated** |
 | 8 | Pipeline Orchestration and Recovery | Medium | Active |
