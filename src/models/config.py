@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     modal_app_name: str = Field(default="API-develop", validation_alias="MODAL_APP_NAME")
     modal_project: str | None = Field(default=None, validation_alias="MODAL_PROJECT")  # e.g. cody-99083
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    scrape_min_word_count: int = Field(
+        default=50,
+        validation_alias="SCRAPE_MIN_WORD_COUNT",
+    )
 
 
 @lru_cache

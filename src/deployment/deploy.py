@@ -4,6 +4,75 @@ import subprocess
 import sys
 
 
+def push_modal_secrets(env: str) -> bool:
+    """
+    Push secrets from .env to Modal for the specified environment.
+    Creates/updates supabase-credentials-{env} and app-config-{env}.
+
+    Returns True on success, False on failure.
+    """
+    required = [
+        "SUPABASE_URL",
+        "SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_SECRET_KEY",
+        "TRANSACTION_POOLER_URL",
+    ]
+    missing = [k for k in required if not os.environ.get(k)]
+    if missing:
+        print(f"❌ Missing required env vars for Modal secrets: {', '.join(missing)}", file=sys.stderr)
+        print("   Ensure .env is loaded and contains these values.", file=sys.stderr)
+        return False
+
+    modal_project = os.environ.get("MODAL_PROJECT")
+    project_args = ["-e", modal_project] if modal_project else []
+
+    # supabase-credentials-{env} (--force overwrites if exists)
+    supabase_secret = f"supabase-credentials-{env}"
+    supabase_cmd = [
+        "modal",
+        "secret",
+        "create",
+        *project_args,
+        "--force",
+        supabase_secret,
+        f"SUPABASE_URL={os.environ['SUPABASE_URL']}",
+        f"SUPABASE_PUBLISHABLE_KEY={os.environ['SUPABASE_PUBLISHABLE_KEY']}",
+        f"SUPABASE_SECRET_KEY={os.environ['SUPABASE_SECRET_KEY']}",
+        f"TRANSACTION_POOLER_URL={os.environ['TRANSACTION_POOLER_URL']}",
+    ]
+    print(f"🔐 Pushing {supabase_secret} to Modal...")
+    try:
+        subprocess.run(supabase_cmd, check=True, capture_output=True, text=True)
+        print(f"   ✅ {supabase_secret}")
+    except subprocess.CalledProcessError as e:
+        print(f"   ❌ Failed: {e.stderr or e}", file=sys.stderr)
+        return False
+
+    # app-config-{env} (--force overwrites if exists)
+    app_secret = f"app-config-{env}"
+    scrape_min = os.environ.get("SCRAPE_MIN_WORD_COUNT", "50")
+    app_cmd = [
+        "modal",
+        "secret",
+        "create",
+        *project_args,
+        "--force",
+        app_secret,
+        f"ENVIRONMENT={env}",
+        f"JOB_STUCK_TIMEOUT_MINUTES={os.environ.get('JOB_STUCK_TIMEOUT_MINUTES', '15')}",
+        f"SCRAPE_MIN_WORD_COUNT={scrape_min}",
+    ]
+    print(f"🔐 Pushing {app_secret} to Modal...")
+    try:
+        subprocess.run(app_cmd, check=True, capture_output=True, text=True)
+        print(f"   ✅ {app_secret}")
+    except subprocess.CalledProcessError as e:
+        print(f"   ❌ Failed: {e.stderr or e}", file=sys.stderr)
+        return False
+
+    return True
+
+
 def main() -> None:
     """Deploy to Modal. Usage: deploy_dev or deploy_prod."""
     from dotenv import load_dotenv
@@ -15,6 +84,10 @@ def main() -> None:
     deploy_args = ["modal", "deploy"]
     if modal_project:
         deploy_args.extend(["-e", modal_project])
+
+    # Push secrets from .env to Modal before deploy
+    if not push_modal_secrets(env):
+        sys.exit(1)
 
     # Ensure ENVIRONMENT is set so modal_workers uses correct app name and secrets
     deploy_env = os.environ.copy()

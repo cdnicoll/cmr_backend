@@ -11,7 +11,9 @@ from src.models.jobs.job_status import JobStatus
 async def get_pool() -> asyncpg.Pool:
     """Get asyncpg connection pool."""
     url = load_settings().transaction_pooler_url
-    return await asyncpg.create_pool(url, min_size=1, max_size=5, command_timeout=60)
+    return await asyncpg.create_pool(
+        url, min_size=1, max_size=5, command_timeout=60, statement_cache_size=0
+    )
 
 
 async def create_job(
@@ -21,7 +23,9 @@ async def create_job(
 ) -> dict[str, Any]:
     """Create a job and return it."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -41,7 +45,9 @@ async def create_job(
 async def get_job_by_id(job_id: str, user_id: str | None = None) -> dict[str, Any] | None:
     """Get job by ID; optionally filter by user_id for user-scoped access."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             if user_id:
                 row = await conn.fetchrow(
@@ -62,7 +68,9 @@ async def update_job_status(
 ) -> None:
     """Update job status."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             if started_at is not None and completed_at is not None:
                 await conn.execute(
@@ -96,7 +104,9 @@ async def update_job_status(
 async def store_error_info(job_id: str, error_message: str, error_type: str, error_context: dict | None = None) -> None:
     """Store error info on job."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -113,7 +123,9 @@ async def store_error_info(job_id: str, error_message: str, error_type: str, err
 async def store_data_references(job_id: str, data_references: dict) -> None:
     """Store data references on job."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE public.jobs SET data_references = $1, updated_at = NOW() WHERE id = $2",
@@ -131,7 +143,9 @@ async def list_jobs(
 ) -> tuple[list[dict[str, Any]], int]:
     """List jobs for user (user-scoped). Returns (items, total)."""
     url = load_settings().transaction_pooler_url
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             where = ["user_id = $1"]
             params: list[Any] = [user_id]
@@ -168,7 +182,9 @@ async def find_stuck_jobs() -> list[dict[str, Any]]:
     """Find jobs stuck in processing (updated_at older than timeout)."""
     url = load_settings().transaction_pooler_url
     timeout_min = load_settings().job_stuck_timeout_minutes
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -184,7 +200,9 @@ async def find_orphaned_jobs() -> list[dict[str, Any]]:
     """Find orphaned pending jobs (created_at older than timeout)."""
     url = load_settings().transaction_pooler_url
     timeout_min = load_settings().job_stuck_timeout_minutes
-    async with asyncpg.create_pool(url, min_size=1, max_size=5) as pool:
+    async with asyncpg.create_pool(
+        url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """

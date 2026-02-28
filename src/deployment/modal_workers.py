@@ -7,22 +7,54 @@ import modal
 _env = os.environ.get("ENVIRONMENT", "develop")
 app = modal.App(f"Job-Worker-{_env}")
 
-# Base image: pip deps + local src package (for import src.services...)
-image = (
+# Base image: pip deps only (add_local must be last per Modal)
+image_base = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-    "fastapi",
-    "uvicorn",
-    "supabase",
-    "pyjwt[crypto]",
-    "cryptography",
-    "sqlalchemy[asyncio]",
-    "asyncpg",
-    "pydantic",
-    "pydantic-settings",
-    "httpx",
-    "python-dotenv",
+        "fastapi",
+        "uvicorn",
+        "supabase",
+        "pyjwt[crypto]",
+        "cryptography",
+        "sqlalchemy[asyncio]",
+        "asyncpg",
+        "pydantic",
+        "pydantic-settings",
+        "httpx",
+        "python-dotenv",
     )
+)
+
+# Standard image for most workers
+image = image_base.add_local_python_source("src")
+
+# Browser image: Crawl4AI + Playwright — add_local must be last
+browser_image = (
+    image_base
+    .pip_install("crawl4ai", "playwright", "youtube-transcript-api")
+    .apt_install(
+        # Chromium/Playwright system deps (per crawl-for-ai-modal-implementation.md)
+        "libglib2.0-0",
+        "libnss3",
+        "libnspr4",
+        "libatk1.0-0",
+        "libatk-bridge2.0-0",
+        "libcups2",
+        "libdrm2",
+        "libdbus-1-3",
+        "libxkbcommon0",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxfixes3",
+        "libxrandr2",
+        "libgbm1",
+        "libasound2",
+        "libpango-1.0-0",
+        "libcairo2",
+        "libatspi2.0-0",
+        "libxshmfence1",
+    )
+    .run_commands("playwright install chromium")
     .add_local_python_source("src")
 )
 
@@ -31,6 +63,21 @@ _secrets = [
     modal.Secret.from_name(f"supabase-credentials-{_env}"),
     modal.Secret.from_name(f"app-config-{_env}"),
 ]
+
+
+@app.function(
+    image=browser_image,
+    timeout=300,
+    cpu=2,
+    memory=2048,
+    retries=1,
+    secrets=_secrets,
+)
+async def scrape_resource(resource_id: str) -> None:
+    """Scrape a resource by ID. Updates pipeline_stage and scraped_content."""
+    from src.services.scraping.service import scrape_resource as _scrape
+
+    await _scrape(resource_id)
 
 
 @app.function(

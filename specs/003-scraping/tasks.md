@@ -23,8 +23,8 @@
 
 **Purpose**: Dependencies and configuration for scraping
 
-- [ ] T001 Add crawl4ai and youtube-transcript-api to pyproject.toml dependencies
-- [ ] T002 Add SCRAPE_MIN_WORD_COUNT (optional, default 50) to Settings in src/models/config.py
+- [X] T001 Add crawl4ai and youtube-transcript-api to pyproject.toml dependencies
+- [X] T002 Add SCRAPE_MIN_WORD_COUNT (optional, default 50) to Settings in src/models/config.py
 
 ---
 
@@ -34,11 +34,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 [P] Create ScrapedContent and ScrapedContentMetadata Pydantic models in src/models/scraping/scraped_content.py per data-model.md
-- [ ] T004 [P] Create src/models/scraping/__init__.py
-- [ ] T005 Extend ResourcesDAO with get_resource_by_id in src/services/supabase/resources_dao.py
-- [ ] T006 Extend ResourcesDAO with atomic_transition_to_scraping(resource_id) — updates pipeline_stage to scraping only where pipeline_stage=discovered; returns row count
-- [ ] T007 Extend ResourcesDAO with update_resource_after_scrape(resource_id, pipeline_stage, scraped_content=None, failure_reason=None) in src/services/supabase/resources_dao.py
+- [X] T003 [P] Create ScrapedContent and ScrapedContentMetadata Pydantic models in src/models/scraping/scraped_content.py per data-model.md
+- [X] T004 [P] Create src/models/scraping/__init__.py
+- [X] T005 Extend ResourcesDAO with get_resource_by_id in src/services/supabase/resources_dao.py
+- [X] T006 Extend ResourcesDAO with atomic_transition_to_scraping(resource_id) — updates pipeline_stage to scraping only where pipeline_stage=discovered; returns row count
+- [X] T007 Extend ResourcesDAO with update_resource_after_scrape(resource_id, pipeline_stage, scraped_content=None, failure_reason=None) in src/services/supabase/resources_dao.py
 
 **Checkpoint**: Foundation ready — scrape implementation can begin
 
@@ -52,13 +52,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create Crawl4AI client wrapper (AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode.BYPASS) in src/services/scraping/crawl4ai_client.py
-- [ ] T009 [P] [US1] Create YouTube transcript extractor using youtube-transcript-api in src/services/scraping/youtube_extractor.py
-- [ ] T010 [US1] Create src/services/scraping/__init__.py and ScrapingService in src/services/scraping/service.py — orchestrate fetch, route by type, extract, validate word_count, update resource
-- [ ] T011 [US1] Implement minimum content length validation in ScrapingService (word_count < SCRAPE_MIN_WORD_COUNT → failed with "Insufficient content")
-- [ ] T012 [US1] Implement eligibility check in ScrapingService — skip if pipeline_stage != discovered; log and return
-- [ ] T013 [US1] Create browser_image in src/deployment/modal_workers.py with crawl4ai, playwright (extends base image)
-- [ ] T014 [US1] Add scrape_resource Modal function with browser_image, timeout=300, cpu=2, memory=2048, retries=1, secrets; invoke ScrapingService.scrape_resource(resource_id)
+- [X] T008 [P] [US1] Create Crawl4AI client wrapper (AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode.BYPASS) in src/services/scraping/crawl4ai_client.py
+- [X] T009 [P] [US1] Create YouTube transcript extractor using youtube-transcript-api in src/services/scraping/youtube_extractor.py
+- [X] T010 [US1] Create src/services/scraping/__init__.py and ScrapingService in src/services/scraping/service.py — orchestrate fetch, route by type, extract, validate word_count, update resource
+- [X] T011 [US1] Implement minimum content length validation in ScrapingService (word_count < SCRAPE_MIN_WORD_COUNT → failed with "Insufficient content")
+- [X] T012 [US1] Implement eligibility check in ScrapingService — skip if pipeline_stage != discovered; log and return
+- [X] T013 [US1] Create browser_image in src/deployment/modal_workers.py with crawl4ai, playwright (extends base image)
+- [X] T014 [US1] Add scrape_resource Modal function with browser_image, timeout=300, cpu=2, memory=2048, retries=1, secrets; invoke ScrapingService.scrape_resource(resource_id)
 
 **Checkpoint**: User Story 1 complete — scrape worker functional for website and YouTube
 
@@ -72,8 +72,8 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Ensure atomic transition discovered→scraping at scrape start in ScrapingService — use atomic_transition_to_scraping; if 0 rows updated, log and return (another worker claimed)
-- [ ] T016 [US2] Ensure failure_reason populated on all failure paths in ScrapingService — Crawl4AI/YouTube exception, insufficient content, eligibility skip (no update needed for skip)
+- [X] T015 [US2] Ensure atomic transition discovered→scraping at scrape start in ScrapingService — use atomic_transition_to_scraping; if 0 rows updated, log and return (another worker claimed)
+- [X] T016 [US2] Ensure failure_reason populated on all failure paths in ScrapingService — Crawl4AI/YouTube exception, insufficient content, eligibility skip (no update needed for skip)
 
 **Checkpoint**: Pipeline transitions and failure handling verified
 
@@ -87,8 +87,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Confirm retries=1 on scrape_resource Modal decorator in src/deployment/modal_workers.py
-- [ ] T018 [US3] Add structured logging in ScrapingService for resource_id, stage transitions, and failures (use get_logger)
+- [X] T017 [US3] Confirm retries=1 on scrape_resource Modal decorator in src/deployment/modal_workers.py
+- [X] T018 [US3] Add structured logging in ScrapingService for resource_id, stage transitions, and failures (use get_logger)
 
 **Checkpoint**: Timeouts and retries configured; logging in place
 
@@ -98,7 +98,7 @@
 
 **Purpose**: Configuration, documentation, validation
 
-- [ ] T019 Add SCRAPE_MIN_WORD_COUNT to .env.example (optional, default 50)
+- [X] T019 Add SCRAPE_MIN_WORD_COUNT to .env.example (optional, default 50)
 - [ ] T020 Run quickstart.md validation — deploy, create resource, spawn scrape, verify Supabase
 
 ---

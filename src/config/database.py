@@ -48,7 +48,7 @@ async def check_transaction_pooler_health() -> bool:
     """Check if transaction pooler is reachable."""
     try:
         url = load_settings().transaction_pooler_url
-        conn = await asyncpg.connect(url)
+        conn = await asyncpg.connect(url, statement_cache_size=0)
         await conn.execute("SELECT 1")
         await conn.close()
         return True
