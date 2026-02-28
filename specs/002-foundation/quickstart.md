@@ -59,9 +59,10 @@ API: `http://localhost:8000`
 ### Create resources (requires JWT)
 
 ```bash
-# Replace <JWT> with a valid Supabase Auth token
+# Get JWT: uv run python scripts/get_jwt.py
+# Then: export JWT_TOKEN="<output>"
 curl -X POST http://localhost:8000/api/v1/resources \
-  -H "Authorization: Bearer <JWT>" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"urls": ["https://example.com/article-1", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}'
 ```
@@ -87,13 +88,13 @@ curl -X POST http://localhost:8000/api/v1/resources \
 
 ## Test Checklist (from build-plan)
 
-- [ ] `GET /health` and `GET /health/db` return 200
-- [ ] `POST /api/v1/resources` with valid URL returns 201; resource in Supabase with `pipeline_stage = discovered`
-- [ ] `POST /api/v1/resources` with same URL again returns 200 (skipped)
-- [ ] `POST /api/v1/resources` with invalid or SSRF URL returns 422
-- [ ] `POST /api/v1/resources` with YouTube URL creates resource with `type = youtube`
-- [ ] Query Supabase: `resources` table schema matches spec (`pipeline_stage`, `failure_reason`, `scraped_content`, `insight`, `discovery_source_id`)
-- [ ] Protected endpoint without JWT returns 401
+- [X] `GET /health` and `GET /health/db` return 200
+- [X] `POST /api/v1/resources` with valid URL returns 201; resource in Supabase with `pipeline_stage = discovered`
+- [X] `POST /api/v1/resources` with same URL again returns 200 (skipped)
+- [X] `POST /api/v1/resources` with invalid or SSRF URL — returns 200 with `errors` count and per-result `error` (per API contract)
+- [X] `POST /api/v1/resources` with YouTube URL creates resource with `type = youtube`
+- [X] Query Supabase: `resources` table schema matches spec (`pipeline_stage`, `failure_reason`, `scraped_content`, `insight`, `discovery_source_id`)
+- [X] Protected endpoint without JWT returns 401
 
 ---
 

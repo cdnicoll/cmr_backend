@@ -24,7 +24,7 @@
 
 **Purpose**: Create directory structure for the resources domain
 
-- [ ] T001 Create resources domain directories: `src/api/routes/resources/`, `src/models/resources/`, `src/services/supabase/`, `src/api/schemas/` (if not exists), `docs/db/migrations/` (if not exists)
+- [X] T001 Create resources domain directories: `src/api/routes/resources/`, `src/models/resources/`, `src/services/supabase/`, `src/api/schemas/` (if not exists), `docs/db/migrations/` (if not exists)
 
 ---
 
@@ -34,8 +34,8 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 [US3] Add `resources` table migration to `scripts/migrate.py` — CREATE TABLE IF NOT EXISTS resources with id, url, title, type, pipeline_stage, failure_reason, scraped_content (JSONB), insight (JSONB), discovery_source_id (UUID), created_at, updated_at; indexes: resources_url_key (UNIQUE), resources_pipeline_stage_idx, resources_created_at_idx; CHECK constraints for pipeline_stage and type; updated_at trigger: create `update_updated_at_column()` function (CREATE OR REPLACE) if not exists, then DROP TRIGGER IF EXISTS + CREATE TRIGGER resources_updated_at BEFORE UPDATE ON resources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
-- [ ] T003 [P] Implement `src/utils/url_validation.py` — SSRF protection (block localhost, 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, link-local), URL normalization (https preferred, trailing slash), type detection (website vs youtube), YouTube format validation (youtube.com/watch, youtu.be/)
+- [X] T002 [US3] Add `resources` table migration to `scripts/migrate.py` — CREATE TABLE IF NOT EXISTS resources with id, url, title, type, pipeline_stage, failure_reason, scraped_content (JSONB), insight (JSONB), discovery_source_id (UUID), created_at, updated_at; indexes: resources_url_key (UNIQUE), resources_pipeline_stage_idx, resources_created_at_idx; CHECK constraints for pipeline_stage and type; updated_at trigger: create `update_updated_at_column()` function (CREATE OR REPLACE) if not exists, then DROP TRIGGER IF EXISTS + CREATE TRIGGER resources_updated_at BEFORE UPDATE ON resources FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+- [X] T003 [P] Implement `src/utils/url_validation.py` — SSRF protection (block localhost, 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, link-local), URL normalization (https preferred, trailing slash), type detection (website vs youtube), YouTube format validation (youtube.com/watch, youtu.be/)
 
 **Checkpoint**: Migration runs successfully; url_validation module passes validation for valid/invalid/SSRF URLs
 
@@ -49,12 +49,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T004 [P] [US1] Create ResourceType and PipelineStage enums in `src/models/resources/resource.py`
-- [ ] T005 [P] [US1] Create BatchCreateResourceRequest, BatchCreateResourceResponse, ResourceResult schemas in `src/api/schemas/resources.py`
-- [ ] T006 [US1] Implement ResourcesDAO in `src/services/supabase/resources_dao.py` — insert resource, get by url; use `get_supabase_client()` from `src/config/supabase.py`; handle unique constraint for duplicate skip
-- [ ] T007 [US1] Implement ResourcesService in `src/services/resources_service.py` — batch_create: validate each URL via url_validation, call DAO for insert/lookup, return BatchCreateResourceResponse with created/skipped/errors and results
-- [ ] T008 [US1] Add `get_resources_service()` in `src/api/dependencies.py` and implement `POST /api/v1/resources` route in `src/api/routes/resources/router.py` — use `Depends(get_validated_jwt_user)`, `Depends(get_resources_service)`; return 201 if any created, 200 if all skipped; handle 422 for validation errors
-- [ ] T009 [US1] Register resources router under `/api/v1` prefix in `src/api/main.py`
+- [X] T004 [P] [US1] Create ResourceType and PipelineStage enums in `src/models/resources/resource.py`
+- [X] T005 [P] [US1] Create BatchCreateResourceRequest, BatchCreateResourceResponse, ResourceResult schemas in `src/api/schemas/resources.py`
+- [X] T006 [US1] Implement ResourcesDAO in `src/services/supabase/resources_dao.py` — insert resource, get by url; use `get_supabase_client()` from `src/config/supabase.py`; handle unique constraint for duplicate skip
+- [X] T007 [US1] Implement ResourcesService in `src/services/resources_service.py` — batch_create: validate each URL via url_validation, call DAO for insert/lookup, return BatchCreateResourceResponse with created/skipped/errors and results
+- [X] T008 [US1] Add `get_resources_service()` in `src/api/dependencies.py` and implement `POST /api/v1/resources` route in `src/api/routes/resources/router.py` — use `Depends(get_validated_jwt_user)`, `Depends(get_resources_service)`; return 201 if any created, 200 if all skipped; handle 422 for validation errors
+- [X] T009 [US1] Register resources router under `/api/v1` prefix in `src/api/main.py`
 
 **Checkpoint**: User Story 1 fully functional — batch create works; duplicates skipped; invalid/SSRF URLs return 422
 
@@ -68,7 +68,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Verify `POST /api/v1/resources` uses `Depends(get_validated_jwt_user)` in `src/api/routes/resources/router.py` — auth is satisfied by T008; this task confirms and documents
+- [X] T010 [US2] Verify `POST /api/v1/resources` uses `Depends(get_validated_jwt_user)` in `src/api/routes/resources/router.py` — auth is satisfied by T008; this task confirms and documents
 
 **Checkpoint**: User Story 2 verified — 401 returned for missing/invalid JWT
 
@@ -82,7 +82,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T011 [US3] Verify migration idempotency — run `scripts/migrate.py` twice; confirm no error on second run; document in `specs/002-foundation/quickstart.md` if needed
+- [X] T011 [US3] Verify migration idempotency — run `scripts/migrate.py` twice; confirm no error on second run; document in `specs/002-foundation/quickstart.md` if needed
 
 **Checkpoint**: User Story 3 verified — migration idempotent; schema matches data-model.md
 
@@ -92,8 +92,8 @@
 
 **Purpose**: Final validation and documentation
 
-- [ ] T012 Run quickstart.md validation — follow `specs/002-foundation/quickstart.md` steps; confirm all checklist items pass
-- [ ] T013 [P] Add request_id to ResourcesService log messages per `src/utils/logging.py` conventions
+- [X] T012 Run quickstart.md validation — follow `specs/002-foundation/quickstart.md` steps; confirm all checklist items pass
+- [X] T013 [P] Add request_id to ResourcesService log messages per `src/utils/logging.py` conventions
 
 ---
 

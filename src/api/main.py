@@ -30,9 +30,11 @@ app.add_middleware(RequestIDMiddleware)
 
 from src.api.routes import health
 from src.api.routes.jobs import router as jobs_router
+from src.api.routes.resources import router as resources_router
 
 app.include_router(health.router)
 app.include_router(jobs_router)
+app.include_router(resources_router, prefix="/api/v1")
 
 
 @app.exception_handler(Exception)
