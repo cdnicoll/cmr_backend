@@ -99,7 +99,7 @@
 **Purpose**: Configuration, documentation, validation
 
 - [X] T019 Add SCRAPE_MIN_WORD_COUNT to .env.example (optional, default 50)
-- [ ] T020 Run quickstart.md validation — deploy, create resource, spawn scrape, verify Supabase
+- [X] T020 Run quickstart.md validation — deploy, create resource, spawn scrape, verify Supabase
 
 ---
 

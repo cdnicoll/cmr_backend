@@ -83,8 +83,8 @@ Replace `<resource-uuid>` with a resource in `discovered` stage.
 
 ## Test Checklist (from build-plan)
 
-- [ ] Spawn scrape worker with `resource_id` (resource in `discovered`); confirm `discovered` → `scraping` → `scraped`
-- [ ] Confirm `scraped_content` JSONB populated on resource row
+- [X] Spawn scrape worker with `resource_id` (resource in `discovered`); confirm `discovered` → `scraping` → `scraped`
+- [X] Confirm `scraped_content` JSONB populated on resource row
 - [ ] Repeat with YouTube URL — confirm YouTube extraction path runs
 - [ ] Spawn against URL that blocks scrapers — confirm `pipeline_stage = failed`, `failure_reason` populated
 - [ ] Spawn against page with near-empty content (word_count &lt; 50) — confirm `pipeline_stage = failed`, `failure_reason = "Insufficient content"`
