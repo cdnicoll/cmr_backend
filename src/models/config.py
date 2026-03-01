@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         default=50,
         validation_alias="SCRAPE_MIN_WORD_COUNT",
     )
+    scraping_proxy_url: str | None = Field(
+        default=None,
+        validation_alias="SCRAPING_PROXY_URL",
+    )
 
 
 @lru_cache

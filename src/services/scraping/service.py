@@ -1,15 +1,16 @@
 """Scraping service — orchestrates fetch, extraction, and resource updates."""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from src.models.config import load_settings
 from src.models.resources import PipelineStage
 from src.models.scraping import ScrapedContent, ScrapedContentMetadata
+from src.services.scraping import crawl4ai_client, youtube_extractor
 from src.services.supabase.resources_dao import (
     atomic_transition_to_scraping,
     get_resource_by_id,
     update_resource_after_scrape,
 )
-from src.services.scraping import crawl4ai_client, youtube_extractor
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +24,8 @@ async def scrape_resource(resource_id: str) -> None:
     """
     settings = load_settings()
     min_word_count = settings.scrape_min_word_count
+    proxy_url = settings.scraping_proxy_url
+    logger.info("Proxy configured: %s", "yes" if proxy_url else "no")
 
     # 1. Fetch resource
     resource = await get_resource_by_id(resource_id)
@@ -37,7 +40,9 @@ async def scrape_resource(resource_id: str) -> None:
     # 2. Eligibility check — skip if not discovered
     if current_stage != PipelineStage.DISCOVERED.value:
         logger.info(
-            "Skipping resource: not in discovered stage",
+            "Skipping resource %s: not in discovered stage (current: %s)",
+            resource_id,
+            current_stage,
             extra={"resource_id": resource_id, "pipeline_stage": current_stage},
         )
         return
@@ -59,9 +64,9 @@ async def scrape_resource(resource_id: str) -> None:
     try:
         # 4. Extract content by type
         if resource_type == "youtube":
-            markdown, title = await _run_async(youtube_extractor.fetch_youtube_transcript, url)
+            markdown, title = await _run_async(youtube_extractor.fetch_youtube_transcript, url, proxy_url)
         else:
-            markdown, title = await crawl4ai_client.fetch_website_content(url)
+            markdown, title = await crawl4ai_client.fetch_website_content(url, proxy_url)
 
         # 5. Validate word count
         word_count = len(markdown.split()) if markdown else 0
@@ -83,7 +88,7 @@ async def scrape_resource(resource_id: str) -> None:
             markdown=markdown,
             title=title,
             url=url,
-            extracted_at=datetime.now(timezone.utc),
+            extracted_at=datetime.now(UTC),
             metadata=ScrapedContentMetadata(
                 word_count=word_count,
                 type=resource_type,

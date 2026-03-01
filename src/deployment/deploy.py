@@ -62,6 +62,8 @@ def push_modal_secrets(env: str) -> bool:
         f"JOB_STUCK_TIMEOUT_MINUTES={os.environ.get('JOB_STUCK_TIMEOUT_MINUTES', '15')}",
         f"SCRAPE_MIN_WORD_COUNT={scrape_min}",
     ]
+    if scraping_proxy_url := os.environ.get("SCRAPING_PROXY_URL"):
+        app_cmd.append(f"SCRAPING_PROXY_URL={scraping_proxy_url}")
     print(f"🔐 Pushing {app_secret} to Modal...")
     try:
         subprocess.run(app_cmd, check=True, capture_output=True, text=True)

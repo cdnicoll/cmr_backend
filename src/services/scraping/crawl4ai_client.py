@@ -2,13 +2,13 @@
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 
 
-async def fetch_website_content(url: str) -> tuple[str, str]:
+async def fetch_website_content(url: str, proxy_url: str | None = None) -> tuple[str, str]:
     """
     Fetch website content via Crawl4AI.
     Returns (markdown_content, title).
     Raises on fetch/crawl errors.
     """
-    browser_config = BrowserConfig(headless=True)
+    browser_config = BrowserConfig(headless=True, proxy=proxy_url)
     run_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
     async with AsyncWebCrawler(config=browser_config) as crawler:

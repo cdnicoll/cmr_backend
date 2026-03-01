@@ -2,6 +2,7 @@
 from urllib.parse import parse_qs, urlparse
 
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 
 def _extract_video_id(url: str) -> str | None:
@@ -20,7 +21,7 @@ def _extract_video_id(url: str) -> str | None:
     return None
 
 
-def fetch_youtube_transcript(url: str) -> tuple[str, str]:
+def fetch_youtube_transcript(url: str, proxy_url: str | None = None) -> tuple[str, str]:
     """
     Fetch YouTube transcript for the given video URL.
     Returns (markdown_content, title).
@@ -31,14 +32,15 @@ def fetch_youtube_transcript(url: str) -> tuple[str, str]:
     if not video_id:
         raise ValueError(f"Could not extract video ID from URL: {url}")
 
-    api = YouTubeTranscriptApi()
+    proxy_config = GenericProxyConfig(http_url=proxy_url, https_url=proxy_url) if proxy_url else None
+    api = YouTubeTranscriptApi(proxy_config=proxy_config)
     transcript = api.fetch(video_id)
 
     # Concatenate snippet text into markdown
     parts = [snippet.text for snippet in transcript]
     markdown = "\n\n".join(parts) if parts else ""
 
-    # Title: transcript API doesn't provide it; use placeholder; caller may enrich
-    title = f"YouTube video {video_id}"
+    # Title: youtube-transcript-api does not return video title; use URL as fallback per contract
+    title = url
 
     return (markdown, title)

@@ -24,8 +24,8 @@
 
 **Purpose**: Ensure dependencies and project structure for YouTube scraping path
 
-- [ ] T001 Verify `youtube-transcript-api` in pyproject.toml (add if missing)
-- [ ] T002 [P] Verify project structure: `src/deployment/modal_workers.py`, `src/services/scraping/youtube_extractor.py`, `src/services/scraping/service.py`
+- [X] T001 Verify `youtube-transcript-api` in pyproject.toml (add if missing)
+- [X] T002 [P] Verify project structure: `src/deployment/modal_workers.py`, `src/services/scraping/youtube_extractor.py`, `src/services/scraping/service.py`
 
 ---
 
@@ -35,9 +35,9 @@
 
 **⚠️ CRITICAL**: Phase 2 (003-scraping) must be complete. Phase 2b extends it.
 
-- [ ] T003 Verify `ScrapedContent` and `ScrapedContentMetadata` support `metadata.type: Literal["website", "youtube"]` in src/models/scraping/scraped_content.py
-- [ ] T004 Verify `atomic_transition_to_scraping` and `update_resource_after_scrape` exist in src/services/supabase/resources_dao.py
-- [ ] T005 Verify `SCRAPE_MIN_WORD_COUNT` (or `scrape_min_word_count`) in config/settings
+- [X] T003 Verify `ScrapedContent` and `ScrapedContentMetadata` support `metadata.type: Literal["website", "youtube"]` in src/models/scraping/scraped_content.py
+- [X] T004 Verify `atomic_transition_to_scraping` and `update_resource_after_scrape` exist in src/services/supabase/resources_dao.py
+- [X] T005 Verify `SCRAPE_MIN_WORD_COUNT` (or `scrape_min_word_count`) in config/settings
 
 **Checkpoint**: Foundation ready — user story implementation can begin
 
@@ -51,12 +51,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T006 [P] [US1] Implement video ID extraction for `youtube.com/watch?v=`, `youtu.be/`, and `youtube.com/shorts/` in src/services/scraping/youtube_extractor.py
-- [ ] T007 [US1] Implement transcript fetch via `youtube-transcript-api` in src/services/scraping/youtube_extractor.py — concatenate transcript `text` into markdown; title = resource URL (youtube-transcript-api does not return video title)
-- [ ] T008 [US1] Extend `scrape_resource` to route `type=youtube` to YouTube extraction path in src/services/scraping/service.py
-- [ ] T009 [US1] Implement `scraped_content` JSONB with `metadata.type = "youtube"` on success in src/services/scraping/service.py
-- [ ] T010 [US1] Implement word count validation: if `word_count < SCRAPE_MIN_WORD_COUNT`, mark `failed` with `failure_reason = "Insufficient content"` in src/services/scraping/service.py
-- [ ] T011 [US1] Handle `TranscriptsDisabled`, `VideoUnavailable`, `NoTranscriptFound` exceptions from youtube-transcript-api — mark `failed` with `failure_reason` in src/services/scraping/service.py
+- [X] T006 [P] [US1] Implement video ID extraction for `youtube.com/watch?v=`, `youtu.be/`, and `youtube.com/shorts/` in src/services/scraping/youtube_extractor.py
+- [X] T007 [US1] Implement transcript fetch via `youtube-transcript-api` in src/services/scraping/youtube_extractor.py — concatenate transcript `text` into markdown; title = resource URL (youtube-transcript-api does not return video title)
+- [X] T008 [US1] Extend `scrape_resource` to route `type=youtube` to YouTube extraction path in src/services/scraping/service.py
+- [X] T009 [US1] Implement `scraped_content` JSONB with `metadata.type = "youtube"` on success in src/services/scraping/service.py
+- [X] T010 [US1] Implement word count validation: if `word_count < SCRAPE_MIN_WORD_COUNT`, mark `failed` with `failure_reason = "Insufficient content"` in src/services/scraping/service.py
+- [X] T011 [US1] Handle `TranscriptsDisabled`, `VideoUnavailable`, `NoTranscriptFound` exceptions from youtube-transcript-api — mark `failed` with `failure_reason` in src/services/scraping/service.py
 
 **Checkpoint**: User Story 1 complete — YouTube scrape path functional
 
@@ -70,10 +70,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Implement atomic transition `discovered` → `scraping` at scrape start in src/services/scraping/service.py (via resources_dao)
-- [ ] T013 [US2] Implement transition `scraping` → `scraped` on success in src/services/scraping/service.py
-- [ ] T014 [US2] Implement transition `scraping` → `failed` with `failure_reason` on error (disabled captions, unavailable, insufficient content) in src/services/scraping/service.py
-- [ ] T015 [US2] Implement skip when `pipeline_stage != discovered` (no overwrite of completed content) in src/services/scraping/service.py
+- [X] T012 [US2] Implement atomic transition `discovered` → `scraping` at scrape start in src/services/scraping/service.py (via resources_dao)
+- [X] T013 [US2] Implement transition `scraping` → `scraped` on success in src/services/scraping/service.py
+- [X] T014 [US2] Implement transition `scraping` → `failed` with `failure_reason` on error (disabled captions, unavailable, insufficient content) in src/services/scraping/service.py
+- [X] T015 [US2] Implement skip when `pipeline_stage != discovered` (no overwrite of completed content) in src/services/scraping/service.py
 
 **Checkpoint**: User Stories 1 and 2 complete — full YouTube scrape flow with correct stage transitions
 
@@ -83,8 +83,8 @@
 
 **Purpose**: Validation and documentation
 
-- [ ] T016 Run quickstart.md validation: create YouTube resource, spawn scrape_resource, verify scraped_content and pipeline_stage
-- [ ] T017 [P] Update quickstart.md if deploy or invocation steps differ from current implementation
+- [X] T016 Run quickstart.md validation: create YouTube resource, spawn scrape_resource, verify scraped_content and pipeline_stage
+- [X] T017 [P] Update quickstart.md if deploy or invocation steps differ from current implementation
 
 ---
 

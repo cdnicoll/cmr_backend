@@ -46,7 +46,7 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 |-------|------|------------|--------|
 | 1 | Foundation — Resources and Auth | Medium | Complete |
 | 2 | Scraping — Website (Crawl4AI) | Medium–Large | Complete |
-| 2b | Scraping — YouTube (youtube-transcript-api) | Small | Active |
+| 2b | Scraping — YouTube (youtube-transcript-api) | Small | Complete |
 | 3 | Insights — AI Extraction | Large | Active |
 | 4 | Knowledge Graph — Graphiti Ingestion | Medium | Active |
 | 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Active |
@@ -120,6 +120,10 @@ The knowledge graph built from ingested insights. Entities, relationships, and f
 | **Trends system** | **Eliminated from backend.** Replaced by LLM client connected directly to Neo4j MCP server. |
 | **Content generation** | **Eliminated from backend.** Handled by the same LLM client via Neo4j MCP. |
 | **Jobs API (Phase 9)** | **Eliminated.** Starter's existing `GET /jobs` and `GET /jobs/{id}` are sufficient as-is. |
+| **YouTube title** | `youtube-transcript-api` does not return video title. Title field falls back to the resource URL. |
+| **Scraping proxy** | Smartproxy residential proxy used for both Crawl4AI and youtube-transcript-api to avoid cloud IP blocks. URL stored as `SCRAPING_PROXY_URL` in `.env` and `app-config-{env}` Modal secret. Optional — if unset, both paths fall back to direct connections. Pushed automatically by `deploy.py`. |
+| **Proxy integration — YouTube** | `youtube-transcript-api` v1.x uses `GenericProxyConfig(http_url, https_url)` passed to `YouTubeTranscriptApi(proxy_config=...)`. |
+| **Proxy integration — Crawl4AI** | Proxy passed to `BrowserConfig(proxy=proxy_url)`. Crawl4AI uses Playwright/Chromium under the hood; `browser_image` in `modal_workers.py` installs Playwright and Chromium deps. |
 
 ---
 
@@ -316,13 +320,23 @@ Write the plan as if it will be handed to a developer who will use it to write o
 
 ## Current Status
 
-**The build plan has been fully audited and all open questions resolved.** Every decision is annotated directly in `/_local/build-plan.md`. The plan is locked and ready for spec generation.
+**Phases 1, 2, and 2b are complete.** The active build sequence continues with Phase 3.
 
-Key outcomes from the audit:
+| Phase | Status |
+|-------|--------|
+| 1 — Foundation | Complete |
+| 2 — Scraping (Crawl4AI) | Complete |
+| 2b — Scraping (YouTube) | Complete |
+| 3 — Insights (AI Extraction) | Next |
+| 4 — Knowledge Graph | Pending |
+| 5 — Content Discovery | Pending |
+| 8 — Orchestration & Recovery | Pending |
+
+Key outcomes to date:
 - Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
 - The backend's responsibility ends at Phase 4: getting clean, structured data into the knowledge graph
-- The active build sequence is: **Phase 1 → 2 → 3 → 4 → 5 → 8**
-- All architectural decisions are resolved (see Resolved Decisions table above)
+- Residential proxy (Smartproxy) added for both Crawl4AI and YouTube scraping to bypass cloud IP blocks
+- `deploy.py` automatically pushes all secrets from `.env` to Modal on deploy — new env vars must be added to both `.env` and `push_modal_secrets()` in `deploy.py`
 
 ---
 
@@ -337,6 +351,6 @@ The build plan is locked. For each active phase, the rhythm is:
 2. **Build task by task** in Cursor Agent mode using the spec as a checklist
 3. **Update `/_local/build-plan.md`** if scope or sequencing changes during the build
 
-Active phases in order: **1 → 2 → 3 → 4 → 5 → 8**
+Active phases in order: **3 → 4 → 5 → 8**
 
-Start with Phase 1: Foundation — Resources and Auth.
+Start with Phase 3: Insights — AI Extraction.
