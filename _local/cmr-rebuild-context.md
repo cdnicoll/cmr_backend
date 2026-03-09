@@ -47,15 +47,15 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 | 1 | Foundation — Resources and Auth | Medium | Complete |
 | 2 | Scraping — Website (Crawl4AI) | Medium–Large | Complete |
 | 2b | Scraping — YouTube (youtube-transcript-api) | Small | Complete |
-| 3 | Insights — AI Extraction | Large | Active |
-| 4 | Knowledge Graph — Graphiti Ingestion | Medium | Active |
-| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Active |
+| 3 | Insights — AI Extraction | — | **Superseded** (Graphiti is single extractor; Phase 3 extraction code removed in Phase 4) |
+| 4 | Knowledge Graph — Graphiti Ingestion (from scraped content) | Medium | Next |
+| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Pending |
 | 6 | Trends — Multi-Agent Analysis | — | **Eliminated** |
 | 7 | Content Generation | — | **Eliminated** |
-| 8 | Pipeline Orchestration and Recovery | Medium | Active |
+| 8 | Pipeline Orchestration and Recovery | Medium | Pending |
 | 9 | Tasks and Job Monitoring | — | **Eliminated** |
 
-Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Graph (4), with Orchestration (8) tying it all together. The backend's responsibility ends at Phase 4 — getting clean, structured data into the knowledge graph. Trend analysis and content generation are handled outside the backend by an LLM client connected directly to the Neo4j MCP server.
+Pipeline flows: Discovery (5) → Scraping (2) → **Ingest via Graphiti (4)**. There is no separate "insights" step; Graphiti ingests scraped content and performs extraction, entity merge, and graph write. Orchestration (8) ties discovery → scrape → ingest. The backend's responsibility ends at Phase 4. Trend analysis and content generation are handled outside the backend by an LLM client connected directly to the Neo4j MCP server.
 
 ---
 
@@ -65,7 +65,7 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 |------|------------|
 | **discovery_source** | A monitored source the system checks on a schedule for new content. Has a `source_type`: `sitemap` (XML sitemap URL), `rss` (RSS feed URL), or `youtube_channel` (YouTube channel URL). |
 | **resource** | A single piece of content extracted from a discovery source — either a web article URL or a YouTube video URL. The atomic unit of the entire pipeline. |
-| **pipeline** | The ordered processing workflow a resource moves through, tracked by `pipeline_stage`: `discovered → scraping → scraped → extracting → extracted → ingesting → complete / failed`. |
+| **pipeline** | The ordered processing workflow a resource moves through, tracked by `pipeline_stage`: `discovered → scraping → scraped → ingesting → complete / failed`. (Graphiti is the single extractor; no separate extraction stage.) |
 | **discovery** | The process of scanning `discovery_sources` to find new URLs and registering them as resources. Upstream of the pipeline — it feeds it. |
 
 ## Data Model
@@ -75,7 +75,7 @@ Pipeline flows: Discovery (5) → Scraping (2) → Insights (3) → Knowledge Gr
 | Table | Purpose |
 |-------|---------|
 | `discovery_sources` | Sources to monitor — sitemaps, RSS feeds, YouTube channels |
-| `resources` | Content units with full pipeline lifecycle, scraped content, and insight data |
+| `resources` | Content units with full pipeline lifecycle and scraped content (no separate insight JSON for graph — Graphiti extracts from scraped text during ingestion) |
 | `jobs` | Modal job tracking (exists in starter) |
 
 **Neo4j — intelligence layer**
@@ -102,16 +102,16 @@ The knowledge graph built from ingested insights. Entities, relationships, and f
 | Decision | Resolution |
 |----------|------------|
 | **Auth model** | Supabase JWT as-is. No API key system. Cron and Modal functions use a service account JWT stored as a Modal secret. |
-| **Pipeline state** | Single `pipeline_stage` column on `resource`. Values: `discovered`, `scraping`, `scraped`, `extracting`, `extracted`, `ingesting`, `complete`, `failed`. Introduced in Phase 1. |
+| **Pipeline state** | Single `pipeline_stage` column on `resource`. Values: `discovered`, `scraping`, `scraped`, `ingesting`, `complete`, `failed`. Introduced in Phase 1. (No extracting/extracted — Graphiti is the single extractor.) |
 | **`scrape` flag** | Dropped. Eligibility derived from `pipeline_stage` (`discovered` = eligible). |
 | **Crawl4AI usage** | Python library, running inside the existing `browser` tier Modal function. |
 | **Raw content storage** | JSONB column on the `resource` row. |
 | **Scrape trigger** | No manual trigger endpoint. Modal function invoked directly via CLI/dashboard or spawned by discovery. |
 | **Alignment score** | Omitted. Never implemented in legacy; not needed. |
 | **Retry strategy** | Modal-level retries only. No retry logic inside agents. |
-| **Model config** | Per-task env vars: `MODEL_INSIGHT_EXTRACTION`, `MODEL_TRENDS` (n/a), `MODEL_CONTENT_GENERATION` (n/a), `MODEL_FACT_CHECK` (n/a). |
+| **Model config** | Graphiti uses its own LLM/embedder config (see Graphiti docs). Phase 3 extraction used `MODEL_INSIGHT_EXTRACTION`; that code is removed in Phase 4. No CMR-specific model env vars for extraction. |
 | **Neo4j hosting** | Neo4j Aura. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add to Modal secrets. |
-| **Episode length** | Phase 3 agent produces atomic outputs naturally. Phase 4 adds `MAX_EPISODE_LENGTH` env var (default 500 chars) as a safety net. |
+| **Extraction for graph** | **Graphiti is the single extractor.** Ingestion (Phase 4) reads `scraped_content` and sends text to Graphiti; Graphiti performs LLM extraction, entity merge, and writes to Neo4j. No separate Phase 3 extraction agent for the graph path; Phase 3 extraction code is removed as part of Phase 4. |
 | **Discovery sources config** | Stored in a `discovery_sources` Supabase table with `source_type` column: `sitemap`, `rss`, `youtube_channel`. Replaces legacy flat file. Migration script in Phase 5. |
 | **Discovery → scrape handoff** | Batch: collect all new resources, deduplicate, then spawn scrape jobs for net-new only. |
 | **Failed resource retry** | Manual re-queue only. `failure_reason` stored on resource record (error type + message). No automatic retries — blocked sites would loop forever. |
@@ -320,21 +320,22 @@ Write the plan as if it will be handed to a developer who will use it to write o
 
 ## Current Status
 
-**Phases 1, 2, and 2b are complete.** The active build sequence continues with Phase 3.
+**Phases 1, 2, and 2b are complete.** Phase 3 (Insights) was implemented with a PydanticAI extraction agent; the plan has been updated so **Graphiti is the single extractor**. Phase 4 will implement Graphiti ingestion from scraped content and remove the Phase 3 extraction code.
 
 | Phase | Status |
 |-------|--------|
 | 1 — Foundation | Complete |
 | 2 — Scraping (Crawl4AI) | Complete |
 | 2b — Scraping (YouTube) | Complete |
-| 3 — Insights (AI Extraction) | Next |
-| 4 — Knowledge Graph | Pending |
+| 3 — Insights (AI Extraction) | Superseded (code to be removed in Phase 4) |
+| 4 — Knowledge Graph (Graphiti from scraped content) | Next |
 | 5 — Content Discovery | Pending |
 | 8 — Orchestration & Recovery | Pending |
 
 Key outcomes to date:
 - Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
-- The backend's responsibility ends at Phase 4: getting clean, structured data into the knowledge graph
+- **Graphiti as single extractor (Option B2):** Ingestion reads scraped content and sends it to Graphiti; Graphiti does LLM extraction and writes to Neo4j. Phase 4 scope includes removing the Phase 3 extraction code (agent, service, Modal function, etc.)
+- The backend's responsibility ends at Phase 4: getting scraped content into the knowledge graph via Graphiti
 - Residential proxy (Smartproxy) added for both Crawl4AI and YouTube scraping to bypass cloud IP blocks
 - `deploy.py` automatically pushes all secrets from `.env` to Modal on deploy — new env vars must be added to both `.env` and `push_modal_secrets()` in `deploy.py`
 
@@ -351,6 +352,6 @@ The build plan is locked. For each active phase, the rhythm is:
 2. **Build task by task** in Cursor Agent mode using the spec as a checklist
 3. **Update `/_local/build-plan.md`** if scope or sequencing changes during the build
 
-Active phases in order: **3 → 4 → 5 → 8**
+Active phases in order: **4 → 5 → 8**
 
-Start with Phase 3: Insights — AI Extraction.
+Start with **Phase 4: Knowledge Graph — Graphiti Ingestion from scraped content** (and removal of Phase 3 extraction code). Use the Phase 4 prompt in `_local/spec_planning.md`.

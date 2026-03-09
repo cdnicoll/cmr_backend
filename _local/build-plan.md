@@ -2,9 +2,10 @@
 
 ## Current status
 
-**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube), Phase 3 (Insights).  
-**Next:** Phase 4 (Knowledge Graph — Graphiti Ingestion), then Phase 5 (Discovery), Phase 8 (Orchestration).  
-**Runbook:** Commands for testing each pipeline stage (resources, scrape, insight extraction) are in `docs/runbook.md`.
+**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube).  
+**Note:** Phase 3 (Insights) was implemented with a PydanticAI extraction agent and `insight` JSONB; the plan has been updated so that **Graphiti is the single extractor**. Phase 4 will implement Graphiti ingestion from scraped text and **remove the Phase 3 extraction code** (agent, service, Modal function, etc.) in the same scope.  
+**Next:** Phase 4 (Knowledge Graph — Graphiti Ingestion from scraped content), then Phase 5 (Discovery), Phase 8 (Orchestration).  
+**Runbook:** Commands for testing each pipeline stage (resources, scrape, ingest) are in `docs/runbook.md`.
 
 ---
 
@@ -31,7 +32,7 @@ The starter kit already provides:
 | **Recovery** | `recover_orphaned_jobs` (scheduled every 15 min) |
 | **Migration** | Script pattern, PGMQ setup |
 
-**Not present and must be built:** Resources domain, scraping (Crawl4AI), insights agent, Graphiti/Neo4j integration, trends multi-agent, content generation, content discovery, CMR-specific auth (API keys if needed), and the resource pipeline orchestration.
+**Not present and must be built:** Resources domain, scraping (Crawl4AI), Graphiti/Neo4j ingestion (from scraped content; Graphiti is the single extractor), content discovery, and the resource pipeline orchestration. (No separate "insights agent" — extraction is done by Graphiti during ingestion.)
 
 ---
 
@@ -44,7 +45,7 @@ The starter kit already provides:
 | **Task queue** | Celery + Redis | Modal | Replace Celery tasks with Modal functions. No `asyncio.run()` in sync tasks — Modal is async-native. |
 | **Auth** | Bearer API keys (DB-stored) | Supabase Auth (JWT) | Starter uses JWT. All callers including cron and scheduled Modal functions authenticate using a dedicated service account JWT stored as a Modal secret. No changes needed to the starter's existing auth implementation. |
 | **Pipeline orchestration** | 5 independent cron jobs | Modal scheduled + chained calls | Discovery runs on schedule; scrape → insight → ingest chain directly. No implicit ordering. |
-| **Resource state** | `insight_status` + `graphiti_status` (dual columns) | Single `pipeline_stage` | Unified lifecycle: discovered → scraping → scraped → extracting → extracted → ingesting → complete / failed. |
+| **Resource state** | `insight_status` + `graphiti_status` (dual columns) | Single `pipeline_stage` | Unified lifecycle: discovered → scraping → scraped → ingesting → complete / failed. (No separate extraction stage — Graphiti does extraction during ingestion.) |
 | **Observability** | Logfire | Sentry (per desired-changes) | Swap logging/error reporting. |
 | **Graph** | Neo4j + Graphiti | Same | No change. |
 | **AI** | PydanticAI, OpenAI | Same | No change; add env vars for model swapping. |
@@ -79,7 +80,7 @@ Medium. URL validation and batch semantics are well-documented.
 **Open questions / decisions**
 
 1. ~~**Auth model:** Legacy uses API keys for cron and external callers. Starter uses JWT. Options: (a) JWT only — use service account for cron; (b) Add API key table and `validate_api_key` dependency alongside JWT; (c) JWT for UI, API keys for programmatic. Recommend (b) or (c) if cron jobs must call the API with a key.~~ **RESOLVED:** Use the starter kit's Supabase JWT auth as-is. No API key system. All callers including cron and scheduled Modal functions authenticate using a dedicated service account JWT stored as a Modal secret.
-2. ~~**Resource schema:** Legacy has `job_id`, `insight_status`, `graphiti_status`. New design uses `pipeline_stage`. Phase 1 can introduce `pipeline_stage` from the start (values: `discovered`, `scraping`, `scraped`, etc.) or start minimal and add in Phase 2.~~ **RESOLVED:** Introduce `pipeline_stage` in Phase 1 from the start. Values: `discovered`, `scraping`, `scraped`, `extracting`, `extracted`, `ingesting`, `complete`, `failed`.
+2. ~~**Resource schema:** Legacy has `job_id`, `insight_status`, `graphiti_status`. New design uses `pipeline_stage`. Phase 1 can introduce `pipeline_stage` from the start (values: `discovered`, `scraping`, `scraped`, etc.) or start minimal and add in Phase 2.~~ **RESOLVED:** Introduce `pipeline_stage` in Phase 1 from the start. Values: `discovered`, `scraping`, `scraped`, `ingesting`, `complete`, `failed`. (Graphiti is the single extractor; no separate extracting/extracted stages.)
 3. ~~**`scrape` flag:** Legacy has `scrape` (bool) for eligibility. Confirm whether to keep or derive from `pipeline_stage`.~~ **RESOLVED:** Drop the `scrape` flag. Eligibility is derived from `pipeline_stage` — anything in `discovered` is eligible to scrape.
 
 **How to test**
@@ -145,7 +146,7 @@ Medium–large. Crawl4AI replaces Apify; YouTube vs website routing must be pres
 
 **Why at this point**
 
-Phase 2 established the scraping pattern and `scraped_content` schema for websites. YouTube extraction uses a different library (no browser required — `youtube-transcript-api` fetches captions directly) but follows the identical worker pattern. Phase 3 (Insights) requires all resource types to be scrapeable before it can run.
+Phase 2 established the scraping pattern and `scraped_content` schema for websites. YouTube extraction uses a different library (no browser required — `youtube-transcript-api` fetches captions directly) but follows the identical worker pattern. Phase 4 (Graphiti ingestion) requires scraped content for all resource types before it can run.
 
 **Domains included**
 
@@ -170,80 +171,68 @@ Small. The pattern is identical to Phase 2; only the extraction library differs.
 
 ---
 
-### Phase 3: Insights — AI Extraction
+### Phase 3: Insights — Superseded by Phase 4 (Graphiti as single extractor)
 
-**What is being built**
+**Design decision (Option B2):** Graphiti is the single extractor for the knowledge graph. There is no separate "insight extraction" step that writes structured JSON to Supabase for the graph. The pipeline is: **scraped → ingesting → complete**.
 
-- Insight extraction agent (PydanticAI): entities, relationships, scored insights
-- Modal function: reads scraped content, runs agent, stores `insight` JSONB
-- `pipeline_stage`: `scraped` → `extracting` → `extracted`
-- Entity/relationship taxonomy and scoring dimensions (importance, originality, reliability, relevance)
-- Atomic selection + status update for race prevention
-- Stuck-processing reset (configurable timeout)
+**Current state:** Phase 3 was previously implemented with a PydanticAI extraction agent that wrote an `insight` JSONB column. That code remains in the repo but is **deprecated**. As part of **Phase 4**, we will:
+- Implement the Graphiti ingestion worker that reads `scraped_content` (markdown + metadata) and sends it to Graphiti; Graphiti performs LLM-based entity/relationship extraction, entity merge, and writes to Neo4j.
+- **Remove** the Phase 3 extraction code: insight agent, `InsightsService.extract_insights`, `extract_insights` Modal function, DAO methods used only for extraction, `insight`-related models/config, and the `extracting`/`extracted` pipeline stages from use.
 
-**Why at this point**
-
-Knowledge graph ingestion needs structured insight data. Insights depend on scraped content.
-
-**Domains included**
-
-- Insights
-
-**Complexity**
-
-Large. Agent design, retry logic, content validation (min length), and failure handling (disable scrape, mark failed) are non-trivial. Episode size constraints for downstream Graphiti should be considered.
-
-**Open questions / decisions**
-
-1. ~~**Alignment score:** Legacy model has `alignment` with "populated by secondary LLM" but that process is absent. Omit or implement?~~ **RESOLVED:** Omit entirely. Never implemented in legacy; not needed in the rebuild.
-2. ~~**Retry strategy:** Legacy embeds JSON retries in agent. Prefer Modal retries + cleaner agent code.~~ **RESOLVED:** Use Modal-level retries. No retry logic inside the agent itself.
-3. ~~**Model config:** Use `MODEL_INSIGHT_EXTRACTION` env var per desired-changes.~~ **RESOLVED:** Per-task env vars for all model config across the app. Each task gets its own env var: `MODEL_INSIGHT_EXTRACTION` (Phase 3), `MODEL_TRENDS` (Phase 6), `MODEL_CONTENT_GENERATION` and `MODEL_FACT_CHECK` (Phase 7). No global default — each must be explicitly set.
-
-**How to test**
-
-- In the Modal dashboard, spawn the insight extraction worker with a known `resource_id` (a resource in `scraped` stage)
-- Confirm the resource transitions: `scraped` → `extracting` → `extracted` in Supabase
-- Confirm the `insight` JSONB column is populated with entities, relationships, and scores
-- Inspect the insight structure — confirm no `alignment` field is present
-- Spawn against a resource with very short scraped content — confirm it fails gracefully with `failure_reason` populated
+**Phase 3 (as redefined) is therefore:** Validation only — e.g. minimum word count on `scraped_content` before a resource is eligible for ingestion. That validation can live in the Phase 4 ingestion worker (reject or mark `failed` if content too short) or in a thin pre-step. No separate Phase 3 spec is required for new work; the existing `specs/004-insights/` material is historical. Phase 4 spec and implementation cover both "ingest via Graphiti" and "remove Phase 3 extraction code."
 
 ---
 
-### Phase 4: Knowledge Graph — Graphiti Ingestion
+### Phase 4: Knowledge Graph — Graphiti Ingestion (from scraped content)
 
 **What is being built**
 
-- Graphiti/Neo4j integration
-- Modal function: reads insight JSONB, builds episodes, ingests sequentially
-- Episode structure: atomic, focused content (one entity/relationship/fact per episode)
-- `pipeline_stage`: `extracted` → `ingesting` → `complete`
-- Stuck-processing reset (longer timeout than insights)
+- Graphiti/Neo4j integration: **ingestion from scraped content** (not from a pre-extracted insight JSON). The worker reads `scraped_content` (e.g. `markdown`, optional title/url) and sends it to Graphiti as episode(s). Graphiti runs its own LLM-based extraction, entity merge, temporal edges, and writes Entity, Episodic, RELATES_TO, MENTIONS to Neo4j.
+- Modal function: accepts `resource_id`, fetches resource and `scraped_content`, validates (e.g. min word count), transitions to `ingesting`, calls Graphiti to add episode(s), on success sets `pipeline_stage = complete`, on failure sets `failed` and `failure_reason`.
+- `pipeline_stage`: `scraped` → `ingesting` → `complete` (or `failed`). No `extracting`/`extracted` stages.
+- **Removal of Phase 3 extraction code** (same phase): Remove the PydanticAI insight agent, `InsightsService.extract_insights`, `extract_insights` Modal function, DAO methods used only for extraction (`atomic_transition_to_extracting`, `update_resource_after_extraction`), `insight`-related models and config, and update runbook/docs. Optionally deprecate or drop the `insight` column on `resources` (or leave unpopulated).
+- Stuck-processing reset for `ingesting` (configurable timeout); recovery worker in Phase 8 will reset stuck resources.
 
 **Why at this point**
 
-Trends and content generation query the graph. Graph ingestion depends on insights.
+Trends and content generation query the graph. Graph ingestion depends on scraped content. Using Graphiti as the single extractor matches the legacy design and keeps one source of truth (Graphiti's entity merge and temporal handling).
 
 **Domains included**
 
 - Knowledge Graph (Graphiti)
+- Cleanup of superseded Phase 3 extraction (agent, service, Modal, DAO, config)
 
 **Complexity**
 
-Medium. Sequential ingestion and episode size constraints are documented. Connection retries (Neo4j, Graphiti) with backoff should be preserved.
+Medium. Graphiti's add-episode (or equivalent) API, connection retries (Neo4j, Graphiti), and env/credentials. Plus removal of Phase 3 extraction code and pipeline/wiring updates.
 
 **Open questions / decisions**
 
 1. ~~**Neo4j/Graphiti hosting:** Confirm connection details and credentials (Infisical/Modal secrets).~~ **RESOLVED:** Neo4j Aura already provisioned. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add these to the Modal secrets for the worker app.
-2. ~~**Episode validation:** Enforce <400 chars in code to avoid Graphiti LLM overflow.~~ **RESOLVED:** Two-layer approach: (1) Phase 3 insight extraction agent produces atomic, structured outputs (one entity/relationship/fact per insight) which naturally keeps episodes short; (2) Phase 4 adds a configurable `MAX_EPISODE_LENGTH` env var (default: 500 chars) with a validation/truncation step before ingestion as a safety net. Tune the limit after testing against the live Graphiti instance.
-3. **Entity and relationship alignment with existing graph:** Verified against live Neo4j (Entity nodes keyed by `name`, RELATES_TO with `name` in SCREAMING_SNAKE e.g. `INFLUENCED_BY`). Phase 3 output has `entities[].name` and `relationships[]` with snake_case `type` (e.g. `influenced_by`). Ingestion must: (a) **merge Entity by name** so new content attaches to existing nodes (e.g. a new scrape about "Gold" links to the existing Gold entity); (b) **map relationship type** from snake_case to SCREAMING_SNAKE when creating RELATES_TO; (c) set `fact` from relationship context or insight summary/evidence.
+2. **Episode content:** Graphiti ingests text (and optionally structured metadata). Worker passes `scraped_content.markdown` plus resource url/title/source as needed for Graphiti's episode format. Graphiti handles episode size and entity extraction; configure `MAX_EPISODE_LENGTH` or Graphiti equivalents if documented.
+3. **Entity/relationship alignment:** The existing Neo4j graph (Entity by `name`, RELATES_TO with SCREAMING_SNAKE type) was built by Graphiti. Feeding scraped text to Graphiti preserves that; Graphiti performs entity merge so new content (e.g. about "Gold") attaches to existing nodes.
 
 **How to test**
 
-- In the Modal dashboard, spawn the Graphiti ingestion worker with a known `resource_id` (a resource in `extracted` stage)
-- Confirm the resource transitions: `extracted` → `ingesting` → `complete` in Supabase
-- Open the Neo4j Aura console and verify nodes and relationships were created from the ingested episodes
-- Confirm episodes are within the `MAX_EPISODE_LENGTH` limit (check truncation logic fired if needed)
-- Spawn against a resource with no insight data — confirm graceful failure with `failure_reason`
+- Spawn the Graphiti ingestion worker with a `resource_id` (resource in `scraped` stage with valid `scraped_content`)
+- Confirm the resource transitions: `scraped` → `ingesting` → `complete` in Supabase
+- Open the Neo4j console and verify new Entity/Episodic/RELATES_TO/MENTIONS from the ingested content
+- Spawn against a resource with very short or missing content — confirm `pipeline_stage = failed` and `failure_reason` set
+- After Phase 4 code changes: confirm the old `extract_insights` path is removed and the runbook reflects ingest-only flow
+
+**Phase 4 pre-plan (before spec planning)**
+
+Resolve or document the following so the Phase 4 spec can be concrete:
+
+1. **Graphiti API (confirmed):** Use `add_episode()` for single-resource ingestion. Signature: `await graphiti.add_episode(name=..., episode_body=..., source=EpisodeType.text, source_description=..., reference_time=...)`. For scraped content, pass `episode_body=scraped_content.markdown`, `source=EpisodeType.text`. See [Adding Episodes](https://help.getzep.com/graphiti/core-concepts/adding-episodes). Spec should define: `name` (e.g. resource id or `resource_{uuid}`), `source_description` (e.g. resource url or title for provenance), `reference_time` (resource `updated_at` or `created_at` vs `datetime.now()`).
+
+2. **Runtime dependencies:** Ingestion worker needs `graphiti-core`, Neo4j driver (included with Graphiti), and an LLM/embedder. Graphiti defaults to OpenAI; optional extras for Anthropic, Groq, etc. Add to Phase 4 scope: install `graphiti-core` (and optional extras if not using OpenAI), configure Graphiti with `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE` plus LLM/embedder env (e.g. `OPENAI_API_KEY`) in Modal secrets. Document in spec.
+
+3. **Minimum content for ingestion:** Decide env var and default (e.g. `INGEST_MIN_WORD_COUNT`, default 100). Worker rejects or marks `failed` if `scraped_content` is missing or word count below threshold. Spec should include this validation step.
+
+4. **Stuck `ingesting` timeout:** For Phase 8 recovery, define a configurable timeout (e.g. `INGEST_STUCK_TIMEOUT_MINUTES`, default 30). Phase 4 can add the config; Phase 8 recovery worker uses it to reset stuck resources. Spec can note it; implementation in Phase 8.
+
+5. **Runbook:** Phase 4 implementation must update `docs/runbook.md`: replace "Insight extraction (Phase 3)" with "Ingest to Graphiti", new worker command (e.g. `modal run ...::ingest_resource --resource-id <uuid>`), verify `scraped` → `ingesting` → `complete`.
 
 ---
 
@@ -305,7 +294,7 @@ Medium. Filter pipeline and deduplication are well-specified. RSS auto-discovery
 
 **What is being built**
 
-- Unified pipeline: ensure discovery → scrape → insight → ingest chain is wired end-to-end
+- Unified pipeline: ensure discovery → scrape → ingest (Graphiti) chain is wired end-to-end
 - Pipeline recovery: reset `failed` resources for retry, or periodic cleanup of stuck stages
 - Manual triggers for each stage (for debugging/backfill)
 - `POST /jobs/recover` (or equivalent) — starter may already have this; extend for resource pipeline jobs if needed
@@ -321,7 +310,7 @@ All pipeline stages exist. This phase ties them together, adds recovery semantic
 
 **Complexity**
 
-Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (stuck `scraping`, `extracting`, `ingesting`) should mirror job recovery patterns.
+Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (stuck `scraping`, `ingesting`) should mirror job recovery patterns.
 
 **Open questions / decisions**
 
@@ -333,7 +322,7 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 - Trigger the full pipeline end-to-end: insert a source into `discovery_sources`, run discovery, confirm resources flow through all `pipeline_stage` values to `complete` and appear in Neo4j
 - Simulate a stuck resource (manually set `pipeline_stage = scraping` with an old `updated_at`) — confirm the recovery worker resets it to `failed` with a timeout reason
 - Manually re-queue a failed resource (reset `pipeline_stage = discovered`) — confirm it re-enters the pipeline correctly
-- Confirm resources stuck in `extracting` or `ingesting` are also caught by the recovery worker
+- Confirm resources stuck in `ingesting` are also caught by the recovery worker
 - Check the Modal dashboard — confirm all scheduled functions (discovery, recovery) are registered and firing on their expected schedules
 
 ---
@@ -362,12 +351,12 @@ Medium. Mostly wiring and configuration. Recovery logic for `pipeline_stage` (st
 ## Dependency Summary
 
 ```
-Phase 1 (Foundation) → Phase 2 (Website Scraping) → Phase 2b (YouTube Scraping) → Phase 3 (Insights) → Phase 4 (Knowledge Graph)
-     │                       │                              │                           │
-     └───────────────────────┴──────────────────────────────┴───────────────────────────┴──→ Phase 5 (Discovery) → Phase 8 (Orchestration)
+Phase 1 (Foundation) → Phase 2 (Website Scraping) → Phase 2b (YouTube) → Phase 4 (Graphiti Ingestion from scraped content)
+     │                       │                              │
+     └───────────────────────┴──────────────────────────────┴──────────────────────────────→ Phase 5 (Discovery) → Phase 8 (Orchestration)
 ```
 
-No circular dependencies. Phases 6 (Trends) and 7 (Content Generation) have been eliminated — both are handled outside the backend via LLM + Neo4j MCP server. The backend's responsibility ends at Phase 4. Phase 2b must complete before Phase 3 (Insights) since the insight agent needs to handle all resource types. Phase 5 (Discovery) depends on Phase 1 (Resources) and the scrape spawn paths from Phase 2 and 2b. Phase 8 wires the full pipeline after all stages exist.
+No circular dependencies. Phase 3 (Insights) as originally implemented is superseded: Graphiti is the single extractor; Phase 4 implements ingestion from scraped content and removes the Phase 3 extraction code. Phases 6 (Trends) and 7 (Content Generation) are eliminated — handled outside the backend via LLM + Neo4j MCP. The backend's responsibility ends at Phase 4. Phase 2b must complete before Phase 4 (ingestion needs scraped content for all types). Phase 5 (Discovery) depends on Phase 1 and the scrape spawn path; orchestration (Phase 8) wires discovery → scrape → ingest.
 
 ---
 
