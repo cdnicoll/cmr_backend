@@ -1,5 +1,13 @@
 # CMR Rebuild — Phased Build Plan
 
+## Current status
+
+**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube), Phase 3 (Insights).  
+**Next:** Phase 4 (Knowledge Graph — Graphiti Ingestion), then Phase 5 (Discovery), Phase 8 (Orchestration).  
+**Runbook:** Commands for testing each pipeline stage (resources, scrape, insight extraction) are in `docs/runbook.md`.
+
+---
+
 ## Overview
 
 This plan describes how to rebuild the **CMR (Content Mining & Research)** backend — a mining industry content intelligence platform — using the modern starter kit. The legacy app discovers URLs from mining sources, scrapes content via Apify, extracts entities and insights with AI, ingests them into a Neo4j knowledge graph via Graphiti, and exposes trend analysis and AI-generated content APIs. The rebuild will migrate to Supabase, Modal, and Crawl4AI while unifying the pipeline state and replacing implicit cron orchestration with an explicit, event-driven workflow.
@@ -227,6 +235,7 @@ Medium. Sequential ingestion and episode size constraints are documented. Connec
 
 1. ~~**Neo4j/Graphiti hosting:** Confirm connection details and credentials (Infisical/Modal secrets).~~ **RESOLVED:** Neo4j Aura already provisioned. Env vars: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`. Add these to the Modal secrets for the worker app.
 2. ~~**Episode validation:** Enforce <400 chars in code to avoid Graphiti LLM overflow.~~ **RESOLVED:** Two-layer approach: (1) Phase 3 insight extraction agent produces atomic, structured outputs (one entity/relationship/fact per insight) which naturally keeps episodes short; (2) Phase 4 adds a configurable `MAX_EPISODE_LENGTH` env var (default: 500 chars) with a validation/truncation step before ingestion as a safety net. Tune the limit after testing against the live Graphiti instance.
+3. **Entity and relationship alignment with existing graph:** Verified against live Neo4j (Entity nodes keyed by `name`, RELATES_TO with `name` in SCREAMING_SNAKE e.g. `INFLUENCED_BY`). Phase 3 output has `entities[].name` and `relationships[]` with snake_case `type` (e.g. `influenced_by`). Ingestion must: (a) **merge Entity by name** so new content attaches to existing nodes (e.g. a new scrape about "Gold" links to the existing Gold entity); (b) **map relationship type** from snake_case to SCREAMING_SNAKE when creating RELATES_TO; (c) set `fact` from relationship context or insight summary/evidence.
 
 **How to test**
 

@@ -26,7 +26,7 @@
 
 - [X] T001 Add `pydantic-ai==1.0.5` and `openai` to pyproject.toml
 - [X] T002 Add `MODEL_INSIGHT_EXTRACTION`, `INSIGHT_MIN_WORD_COUNT`, and `INSIGHT_STUCK_TIMEOUT_MINUTES` to Settings in `src/models/config.py`
-- [X] T003 [P] Add `MODEL_INSIGHT_EXTRACTION` and `OPENAI_API_KEY` to `.env`; add both to `push_modal_secrets()` in `deploy.py`
+- [X] T003 [P] Add `MODEL_INSIGHT_EXTRACTION` and `OPENROUTER_API_KEY` to `.env`; add both to `push_modal_secrets()` in `deploy.py`
 
 ---
 
@@ -53,9 +53,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create PydanticAI insight agent with `ResourceAnalysis` output schema and mining industry system prompt in `src/services/insights/agent.py`; initialise with `MODEL_INSIGHT_EXTRACTION` env var; module-level singleton
-- [ ] T009 [US1] Implement `InsightsService.extract_insights(resource_id)` in `src/services/insights/service.py` covering the full flow: fetch resource → check `pipeline_stage == scraped` (skip if not, log reason) → validate `scraped_content` non-null → check `word_count >= INSIGHT_MIN_WORD_COUNT` (mark `failed` if not) → atomic transition to `extracting` (skip if 0 rows updated) → run agent → on success set `pipeline_stage = extracted` and write `insight` JSONB → on any exception set `pipeline_stage = failed` and populate `failure_reason = "{ExceptionType}: {message}"`; include structured logging for all stage transitions and skip paths
-- [ ] T010 [US1] Add `extract_insights` Modal function in LLM tier in `src/deployment/modal_workers.py` with `image=image, timeout=600, cpu=1, memory=1024, retries=1, secrets=_secrets` per contracts/insight-extraction-worker.md
+- [X] T008 [P] [US1] Create PydanticAI insight agent with `ResourceAnalysis` output schema and mining industry system prompt in `src/services/insights/agent.py`; initialise using `OpenAIChatModel` + `OpenAIProvider(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)` with `model_name=settings.model_insight_extraction`; module-level singleton
+- [X] T009 [US1] Implement `InsightsService.extract_insights(resource_id)` in `src/services/insights/service.py` covering the full flow: fetch resource → check `pipeline_stage == scraped` (skip if not, log reason) → validate `scraped_content` non-null → check `word_count >= INSIGHT_MIN_WORD_COUNT` (mark `failed` if not) → atomic transition to `extracting` (skip if 0 rows updated) → run agent → on success set `pipeline_stage = extracted` and write `insight` JSONB → on any exception set `pipeline_stage = failed` and populate `failure_reason = "{ExceptionType}: {message}"`; include structured logging for all stage transitions and skip paths
+- [X] T010 [US1] Add `extract_insights` Modal function in LLM tier in `src/deployment/modal_workers.py` with `image=image, timeout=600, cpu=1, memory=1024, retries=1, secrets=_secrets` per contracts/insight-extraction-worker.md
 
 **Checkpoint**: User Story 1 complete — spawn `extract_insights` with `resource_id`; resource transitions to `extracted` with `insight` populated
 
@@ -69,7 +69,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T011 [US3] Manually verify race prevention: set a resource to `extracting` directly in Supabase, invoke `extract_insights` — confirm it logs "already claimed" and returns without overwriting
+- [X] T011 [US3] Manually verify race prevention: set a resource to `extracting` directly in Supabase, invoke `extract_insights` — confirm it logs "already claimed" and returns without overwriting
 
 **Checkpoint**: User Story 3 complete — atomic selection prevents double-processing; `INSIGHT_STUCK_TIMEOUT_MINUTES` config in place for Phase 8
 
@@ -79,7 +79,7 @@
 
 **Purpose**: Validation
 
-- [ ] T012 Run quickstart.md validation: deploy workers, spawn `extract_insights` with test resource, verify `insight` populated, confirm no `alignment` field, confirm failure path works on short content
+- [X] T012 Run quickstart.md validation: deploy workers, spawn `extract_insights` with test resource, verify `insight` populated, confirm no `alignment` field, confirm failure path works on short content
 
 ---
 

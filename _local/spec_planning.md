@@ -3,7 +3,7 @@
 One prompt per active phase. Run each prompt in Cursor Agent mode using spec-kit.
 Save output to `_local/specs/0{N}-{phase-name}/`.
 
-Active build sequence: **Phase 1 → 2 → 2b → 3 → 4 → 5 → 8**
+Active build sequence: **Phase 1 → 2 → 2b → 3 → 4 → 5 → 8** (Phases 1–3 specs are complete; prompts below are for reference and for generating/refining Phase 4 onward.)
 
 ---
 
@@ -81,6 +81,9 @@ Read the following files before creating the spec for Phase 4 only:
 - @_local/domain_findings/domains/04-knowledge-graph.md — for the legacy Graphiti ingestion logic and edge cases to preserve
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
 - @_local/starter-kit/modal-jobs.md — for the Modal worker conventions
+- @specs/004-insights/ — for the Phase 3 insight JSONB shape (entities, relationships) that Phase 4 ingests
+
+Neo4j alignment (verified against live graph): Entity nodes are identified by `name`; RELATES_TO uses relationship type in SCREAMING_SNAKE (e.g. INFLUENCED_BY). Phase 3 output has `entities[].name`, `entities[].type`, and `relationships[]` with snake_case `type` (e.g. influenced_by), `source`, `target`, `context`. The spec should ensure ingestion (a) merges Entity by name so new content attaches to existing nodes, (b) maps relationship type to SCREAMING_SNAKE, and (c) sets RELATES_TO.fact from context/summary/evidence.
 
 Create a spec for Phase 4: Knowledge Graph — Graphiti Ingestion only. Do not plan beyond this phase.
 ```

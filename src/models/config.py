@@ -38,6 +38,19 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="SCRAPING_PROXY_URL",
     )
+    openrouter_api_key: str = Field(..., validation_alias="OPENROUTER_API_KEY")
+    model_insight_extraction: str = Field(
+        default="x-ai/grok-4-fast",
+        validation_alias="MODEL_INSIGHT_EXTRACTION",
+    )
+    insight_min_word_count: int = Field(
+        default=100,
+        validation_alias="INSIGHT_MIN_WORD_COUNT",
+    )
+    insight_stuck_timeout_minutes: int = Field(
+        default=30,
+        validation_alias="INSIGHT_STUCK_TIMEOUT_MINUTES",
+    )
 
 
 @lru_cache

@@ -96,6 +96,24 @@ Resource must have `pipeline_stage = discovered` and `type = youtube`.
 
 ---
 
+### Insight extraction (Phase 3)
+
+Resource must have `pipeline_stage = scraped` and `scraped_content` with `word_count >= INSIGHT_MIN_WORD_COUNT` (default 100).
+
+```bash
+modal run src.deployment.modal_workers::extract_insights --resource-id "<uuid>"
+```
+
+**Verify**: Supabase `resources` — `pipeline_stage = extracted`, `insight` JSONB populated (`resource_overview`, `resource_insights`, `entities`, `relationships`). No `alignment` field.
+
+**Failures**:
+- Resource not in `scraped` — worker logs and returns; no DB change (e.g. "Resource already claimed by another worker" if already `extracting`)
+- `pipeline_stage = failed`, `failure_reason = "Insufficient content for insight extraction"` — word count below threshold
+- `pipeline_stage = failed`, other `failure_reason` — LLM/agent error; check Modal logs
+- Resource stuck in `extracting` — Modal timeout; recovery in Phase 8
+
+---
+
 ## Supabase: Common Queries
 
 Run in Supabase dashboard → SQL Editor.
@@ -108,7 +126,11 @@ SELECT pipeline_stage, count(*) FROM resources GROUP BY pipeline_stage;
 SELECT id, url, failure_reason, updated_at
 FROM resources WHERE pipeline_stage = 'failed' ORDER BY updated_at DESC;
 
--- Recently scraped
+-- Recently scraped (ready for insight extraction)
 SELECT id, url, pipeline_stage, scraped_content->'metadata' AS meta, updated_at
 FROM resources WHERE pipeline_stage = 'scraped' ORDER BY updated_at DESC LIMIT 10;
+
+-- Recently extracted
+SELECT id, url, pipeline_stage, insight->'resource_overview'->>'summary' AS summary, updated_at
+FROM resources WHERE pipeline_stage = 'extracted' ORDER BY updated_at DESC LIMIT 10;
 ```

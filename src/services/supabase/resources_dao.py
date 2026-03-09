@@ -49,6 +49,57 @@ async def atomic_transition_to_scraping(resource_id: str) -> int:
             return int(result.split()[-1]) if result else 0
 
 
+async def atomic_transition_to_extracting(resource_id: str) -> int:
+    """
+    Atomically transition pipeline_stage from scraped to extracting.
+    Returns number of rows updated (1 if claimed, 0 if already claimed or not scraped).
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE public.resources
+                SET pipeline_stage = $1
+                WHERE id = $2 AND pipeline_stage = $3
+                """,
+                PipelineStage.EXTRACTING.value,
+                resource_id,
+                PipelineStage.SCRAPED.value,
+            )
+            return int(result.split()[-1]) if result else 0
+
+
+async def update_resource_after_extraction(
+    resource_id: str,
+    pipeline_stage: str,
+    insight: dict | None = None,
+    failure_reason: str | None = None,
+) -> None:
+    """
+    Update resource after insight extraction attempt.
+    Sets pipeline_stage, and optionally insight (JSONB) or failure_reason.
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE public.resources
+                SET pipeline_stage = $1, insight = $2, failure_reason = $3
+                WHERE id = $4
+                """,
+                pipeline_stage,
+                json.dumps(insight) if insight else None,
+                failure_reason,
+                resource_id,
+            )
+
+
 async def update_resource_after_scrape(
     resource_id: str,
     pipeline_stage: str,

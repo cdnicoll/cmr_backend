@@ -100,7 +100,8 @@ extract_insights.spawn("<resource-uuid>")
 
 ## Configuration
 
-- `MODEL_INSIGHT_EXTRACTION` (required): LLM model for insight extraction (e.g. `gpt-4o`)
+- `MODEL_INSIGHT_EXTRACTION` (required): LLM model for insight extraction (e.g. `x-ai/grok-4-fast`); bare model name — provider is handled via `OpenAIProvider`
+- `OPENROUTER_API_KEY` (required): API key for OpenRouter; OpenRouter base URL (`https://openrouter.ai/api/v1`) is hardcoded in agent initialization
 - `INSIGHT_MIN_WORD_COUNT` (optional, default 100): Minimum word count for extraction; below this, mark `failed`
 - `INSIGHT_STUCK_TIMEOUT_MINUTES` (optional, default 30): Used by recovery worker (Phase 8) to reset stuck `extracting` resources; set above the 10-min function timeout to avoid false positives
 
@@ -108,5 +109,5 @@ extract_insights.spawn("<resource-uuid>")
 
 - Supabase client (service role) — from Modal secrets
 - PydanticAI — for structured agent
-- OpenAI (or configured provider) — for LLM
+- OpenAI SDK (via `openai` package) — used by `OpenAIProvider` to communicate with OpenRouter
 - LLM tier image — CPU/memory for agent

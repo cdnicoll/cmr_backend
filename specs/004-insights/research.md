@@ -25,15 +25,24 @@ Phase 3 implements AI-powered insight extraction from scraped content. The build
 **v1.x API (pin to 1.0.5)**:
 ```python
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
+model = OpenAIChatModel(
+    model_name=settings.model_insight_extraction,  # e.g. "x-ai/grok-4-fast"
+    provider=OpenAIProvider(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=settings.openrouter_api_key,
+    ),
+)
 insight_agent = Agent(
-    model=settings.model_insight_extraction,  # e.g. "openai:gpt-4o"
-    output_type=ResourceAnalysis,             # not result_type=
-    instructions="...",                       # not system_prompt= in constructor
+    model=model,
+    output_type=ResourceAnalysis,  # not result_type=
+    instructions="...",            # not system_prompt= in constructor
 )
 
 result = await insight_agent.run(prompt)
-analysis = result.output                      # not result.data
+analysis = result.output           # not result.data
 ```
 
 ---

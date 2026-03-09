@@ -22,6 +22,8 @@ image_base = (
         "pydantic-settings",
         "httpx",
         "python-dotenv",
+        "pydantic-ai==1.0.5",
+        "openai",
     )
 )
 
@@ -125,6 +127,21 @@ async def process_browser_job(job_id: str, job_type: str, user_id: str, job_para
 async def process_llm_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
     """Process LLM-tier jobs (e.g. document_process, llm_task)."""
     await _process_job(job_id, job_type, user_id, job_parameters)
+
+
+@app.function(
+    image=image,
+    timeout=600,  # 10 min — generous for LLM API round-trips on long content
+    cpu=1,
+    memory=1024,
+    retries=1,
+    secrets=_secrets,
+)
+async def extract_insights(resource_id: str) -> None:
+    """Extract insights from a scraped resource. Updates pipeline_stage and insight."""
+    from src.services.insights.service import InsightsService
+
+    await InsightsService.extract_insights(resource_id)
 
 
 @app.function(

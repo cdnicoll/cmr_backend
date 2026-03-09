@@ -11,7 +11,7 @@ Same as Phase 2, plus:
 - **Phase 2 complete**: At least one resource with `pipeline_stage = scraped` and `scraped_content` populated
 - **Modal account** — required for insight worker (not optional)
 - **Modal secrets**: `supabase-credentials-{ENV}`, `app-config-{ENV}` — same as existing workers; no additional secret needed
-- **Model config**: `MODEL_INSIGHT_EXTRACTION` and the LLM provider API key (e.g. `OPENAI_API_KEY`) go in `.env` and are pushed to `app-config-{ENV}` automatically by `deploy.py`
+- **Model config**: `MODEL_INSIGHT_EXTRACTION` and `OPENROUTER_API_KEY` go in `.env` and are pushed to `app-config-{ENV}` automatically by `deploy.py`
 
 **Optional env vars**:
 - `INSIGHT_MIN_WORD_COUNT` (default 100) — minimum word count for insight extraction; below this, mark `failed` with "Insufficient content for insight extraction"
@@ -31,12 +31,12 @@ uv add "pydantic-ai==1.0.5" openai
 
 ### 2. Configure model
 
-Add `MODEL_INSIGHT_EXTRACTION` and your LLM provider API key to `.env`. They will be pushed to `app-config-{ENV}` automatically when you run `deploy.py`.
+Add `MODEL_INSIGHT_EXTRACTION` and `OPENROUTER_API_KEY` to `.env`. They will be pushed to `app-config-{ENV}` automatically when you run `deploy.py`.
 
 ```bash
 # .env
-MODEL_INSIGHT_EXTRACTION=gpt-4o
-OPENAI_API_KEY=sk-...
+MODEL_INSIGHT_EXTRACTION=x-ai/grok-4-fast
+OPENROUTER_API_KEY=sk-or-...
 ```
 
 ### 3. Deploy workers
