@@ -48,8 +48,8 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 | 2 | Scraping — Website (Crawl4AI) | Medium–Large | Complete |
 | 2b | Scraping — YouTube (youtube-transcript-api) | Small | Complete |
 | 3 | Insights — AI Extraction | — | **Superseded** (Graphiti is single extractor; Phase 3 extraction code removed in Phase 4) |
-| 4 | Knowledge Graph — Graphiti Ingestion (from scraped content) | Medium | Next |
-| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Pending |
+| 4 | Knowledge Graph — Graphiti Ingestion (from scraped content) | Medium | Complete |
+| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Next |
 | 6 | Trends — Multi-Agent Analysis | — | **Eliminated** |
 | 7 | Content Generation | — | **Eliminated** |
 | 8 | Pipeline Orchestration and Recovery | Medium | Pending |
@@ -320,21 +320,21 @@ Write the plan as if it will be handed to a developer who will use it to write o
 
 ## Current Status
 
-**Phases 1, 2, and 2b are complete.** Phase 3 (Insights) was implemented with a PydanticAI extraction agent; the plan has been updated so **Graphiti is the single extractor**. Phase 4 will implement Graphiti ingestion from scraped content and remove the Phase 3 extraction code.
+**Phases 1, 2, 2b, and 4 are complete.** Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 implemented ingestion from scraped content and removed the Phase 3 extraction code. **Next: Phase 5 (Content Discovery).**
 
 | Phase | Status |
 |-------|--------|
 | 1 — Foundation | Complete |
 | 2 — Scraping (Crawl4AI) | Complete |
 | 2b — Scraping (YouTube) | Complete |
-| 3 — Insights (AI Extraction) | Superseded (code to be removed in Phase 4) |
-| 4 — Knowledge Graph (Graphiti from scraped content) | Next |
-| 5 — Content Discovery | Pending |
+| 3 — Insights (AI Extraction) | Superseded (removed in Phase 4) |
+| 4 — Knowledge Graph (Graphiti from scraped content) | Complete |
+| 5 — Content Discovery | Next |
 | 8 — Orchestration & Recovery | Pending |
 
 Key outcomes to date:
 - Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
-- **Graphiti as single extractor (Option B2):** Ingestion reads scraped content and sends it to Graphiti; Graphiti does LLM extraction and writes to Neo4j. Phase 4 scope includes removing the Phase 3 extraction code (agent, service, Modal function, etc.)
+- **Graphiti as single extractor (Option B2):** Ingestion reads scraped content and sends it to Graphiti; Graphiti does LLM extraction and writes to Neo4j. Phase 4 implemented the ingestion worker and removed the Phase 3 extraction code (agent, service, Modal function, DAO methods, insight column).
 - The backend's responsibility ends at Phase 4: getting scraped content into the knowledge graph via Graphiti
 - Residential proxy (Smartproxy) added for both Crawl4AI and YouTube scraping to bypass cloud IP blocks
 - `deploy.py` automatically pushes all secrets from `.env` to Modal on deploy — new env vars must be added to both `.env` and `push_modal_secrets()` in `deploy.py`
@@ -352,6 +352,6 @@ The build plan is locked. For each active phase, the rhythm is:
 2. **Build task by task** in Cursor Agent mode using the spec as a checklist
 3. **Update `/_local/build-plan.md`** if scope or sequencing changes during the build
 
-Active phases in order: **4 → 5 → 8**
+Active phases in order: **5 → 8**
 
-Start with **Phase 4: Knowledge Graph — Graphiti Ingestion from scraped content** (and removal of Phase 3 extraction code). Use the Phase 4 prompt in `_local/spec_planning.md`.
+Start with **Phase 5: Content Discovery — Sitemap, RSS, and YouTube**. Use the Phase 5 prompt in `_local/spec_planning.md`.

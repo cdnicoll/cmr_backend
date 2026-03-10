@@ -2,9 +2,8 @@
 
 ## Current status
 
-**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube).  
-**Note:** Phase 3 (Insights) was implemented with a PydanticAI extraction agent and `insight` JSONB; the plan has been updated so that **Graphiti is the single extractor**. Phase 4 will implement Graphiti ingestion from scraped text and **remove the Phase 3 extraction code** (agent, service, Modal function, etc.) in the same scope.  
-**Next:** Phase 4 (Knowledge Graph — Graphiti Ingestion from scraped content), then Phase 5 (Discovery), Phase 8 (Orchestration).  
+**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube), Phase 4 (Knowledge Graph — Graphiti Ingestion from scraped content). Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 removed the Phase 3 extraction code.  
+**Next:** Phase 5 (Content Discovery — Sitemap, RSS, and YouTube), then Phase 8 (Orchestration).  
 **Runbook:** Commands for testing each pipeline stage (resources, scrape, ingest) are in `docs/runbook.md`.
 
 ---
