@@ -17,7 +17,7 @@ async def get_resource_by_id(resource_id: str) -> dict | None:
             row = await conn.fetchrow(
                 """
                 SELECT id, url, title, type, pipeline_stage, failure_reason,
-                    scraped_content, insight, discovery_source_id, created_at, updated_at
+                    scraped_content, discovery_source_id, created_at, updated_at
                 FROM public.resources WHERE id = $1
                 """,
                 resource_id,
@@ -79,7 +79,7 @@ async def update_resource_after_ingestion(
 ) -> None:
     """
     Update resource after ingestion attempt.
-    Sets pipeline_stage and optionally failure_reason (no insight).
+    Sets pipeline_stage and optionally failure_reason.
     """
     db_url = load_settings().transaction_pooler_url
     async with asyncpg.create_pool(
@@ -141,7 +141,7 @@ async def insert_resource(url: str, resource_type: str) -> dict | None:
                     INSERT INTO public.resources (url, type, pipeline_stage)
                     VALUES ($1, $2, $3)
                     RETURNING id, url, title, type, pipeline_stage, failure_reason,
-                        scraped_content, insight, discovery_source_id, created_at, updated_at
+                        scraped_content, discovery_source_id, created_at, updated_at
                     """,
                     url,
                     resource_type,
