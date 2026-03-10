@@ -61,12 +61,14 @@ def push_modal_secrets(env: str) -> bool:
         f"ENVIRONMENT={env}",
         f"JOB_STUCK_TIMEOUT_MINUTES={os.environ.get('JOB_STUCK_TIMEOUT_MINUTES', '15')}",
         f"SCRAPE_MIN_WORD_COUNT={scrape_min}",
-        f"MODEL_INSIGHT_EXTRACTION={os.environ.get('MODEL_INSIGHT_EXTRACTION', 'x-ai/grok-4-fast')}",
-        f"INSIGHT_MIN_WORD_COUNT={os.environ.get('INSIGHT_MIN_WORD_COUNT', '100')}",
-        f"INSIGHT_STUCK_TIMEOUT_MINUTES={os.environ.get('INSIGHT_STUCK_TIMEOUT_MINUTES', '30')}",
+        f"INGEST_MIN_WORD_COUNT={os.environ.get('INGEST_MIN_WORD_COUNT', '100')}",
+        f"INGEST_STUCK_TIMEOUT_MINUTES={os.environ.get('INGEST_STUCK_TIMEOUT_MINUTES', '30')}",
+        f"NEO4J_URI={os.environ.get('NEO4J_URI', '')}",
+        f"NEO4J_USERNAME={os.environ.get('NEO4J_USERNAME', '')}",
+        f"NEO4J_PASSWORD={os.environ.get('NEO4J_PASSWORD', '')}",
+        f"NEO4J_DATABASE={os.environ.get('NEO4J_DATABASE', 'neo4j')}",
+        f"OPENAI_API_KEY={os.environ.get('OPENAI_API_KEY', '')}",
     ]
-    if openrouter_key := os.environ.get("OPENROUTER_API_KEY"):
-        app_cmd.append(f"OPENROUTER_API_KEY={openrouter_key}")
     if scraping_proxy_url := os.environ.get("SCRAPING_PROXY_URL"):
         app_cmd.append(f"SCRAPING_PROXY_URL={scraping_proxy_url}")
     print(f"🔐 Pushing {app_secret} to Modal...")

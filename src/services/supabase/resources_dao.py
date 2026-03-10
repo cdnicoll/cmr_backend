@@ -49,9 +49,9 @@ async def atomic_transition_to_scraping(resource_id: str) -> int:
             return int(result.split()[-1]) if result else 0
 
 
-async def atomic_transition_to_extracting(resource_id: str) -> int:
+async def atomic_transition_to_ingesting(resource_id: str) -> int:
     """
-    Atomically transition pipeline_stage from scraped to extracting.
+    Atomically transition pipeline_stage from scraped to ingesting.
     Returns number of rows updated (1 if claimed, 0 if already claimed or not scraped).
     """
     db_url = load_settings().transaction_pooler_url
@@ -65,22 +65,21 @@ async def atomic_transition_to_extracting(resource_id: str) -> int:
                 SET pipeline_stage = $1
                 WHERE id = $2 AND pipeline_stage = $3
                 """,
-                PipelineStage.EXTRACTING.value,
+                PipelineStage.INGESTING.value,
                 resource_id,
                 PipelineStage.SCRAPED.value,
             )
             return int(result.split()[-1]) if result else 0
 
 
-async def update_resource_after_extraction(
+async def update_resource_after_ingestion(
     resource_id: str,
     pipeline_stage: str,
-    insight: dict | None = None,
     failure_reason: str | None = None,
 ) -> None:
     """
-    Update resource after insight extraction attempt.
-    Sets pipeline_stage, and optionally insight (JSONB) or failure_reason.
+    Update resource after ingestion attempt.
+    Sets pipeline_stage and optionally failure_reason (no insight).
     """
     db_url = load_settings().transaction_pooler_url
     async with asyncpg.create_pool(
@@ -90,11 +89,10 @@ async def update_resource_after_extraction(
             await conn.execute(
                 """
                 UPDATE public.resources
-                SET pipeline_stage = $1, insight = $2, failure_reason = $3
-                WHERE id = $4
+                SET pipeline_stage = $1, failure_reason = $2
+                WHERE id = $3
                 """,
                 pipeline_stage,
-                json.dumps(insight) if insight else None,
                 failure_reason,
                 resource_id,
             )

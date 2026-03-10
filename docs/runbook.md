@@ -96,21 +96,52 @@ Resource must have `pipeline_stage = discovered` and `type = youtube`.
 
 ---
 
-### Insight extraction (Phase 3)
+### Ingest to Graphiti
 
-Resource must have `pipeline_stage = scraped` and `scraped_content` with `word_count >= INSIGHT_MIN_WORD_COUNT` (default 100).
+Resource must have `pipeline_stage = scraped` and `scraped_content` with `word_count >= INGEST_MIN_WORD_COUNT` (default 100). Neo4j and OpenAI (or equivalent) must be set in Modal secrets (`app-config-{env}`) and in `.env` for local runs.
 
 ```bash
-modal run src.deployment.modal_workers::extract_insights --resource-id "<uuid>"
+modal run src.deployment.modal_workers::ingest_resource --resource-id "<uuid>"
 ```
 
-**Verify**: Supabase `resources` — `pipeline_stage = extracted`, `insight` JSONB populated (`resource_overview`, `resource_insights`, `entities`, `relationships`). No `alignment` field.
+**Verify**: Supabase `resources` — `pipeline_stage = complete`, `failure_reason` null. Knowledge graph (Neo4j via Graphiti) contains ingested content as episodes.
 
 **Failures**:
-- Resource not in `scraped` — worker logs and returns; no DB change (e.g. "Resource already claimed by another worker" if already `extracting`)
-- `pipeline_stage = failed`, `failure_reason = "Insufficient content for insight extraction"` — word count below threshold
-- `pipeline_stage = failed`, other `failure_reason` — LLM/agent error; check Modal logs
-- Resource stuck in `extracting` — Modal timeout; recovery in Phase 8
+- Resource not in `scraped` — worker logs and returns; no DB change (e.g. "Resource already claimed or not in scraped stage" if already `ingesting` or other stage).
+- `pipeline_stage = failed`, `failure_reason = "Insufficient content for ingestion"` — scraped_content missing or word count below threshold.
+- `pipeline_stage = failed`, other `failure_reason` — Graphiti/Neo4j/LLM error; check Modal logs.
+- Resource stuck in `ingesting` — Modal timeout; recovery in Phase 8.
+
+**Env vars** (see `.env.example`): `INGEST_MIN_WORD_COUNT`, `INGEST_STUCK_TIMEOUT_MINUTES`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `OPENAI_API_KEY`.
+
+---
+
+## Neo4j: Verify ingestion
+
+After a successful ingest, the episode appears in Neo4j as `resource_<uuid>`. Run in Neo4j Browser or via MCP.
+
+```cypher
+// Episodes from this pipeline (name = resource_<resource_id>)
+MATCH (e:Episodic)
+WHERE e.name STARTS WITH "resource_"
+RETURN e.name AS name, e.source_description AS source_description
+ORDER BY e.name;
+
+// Entities mentioned by a given resource episode (replace UUID)
+MATCH (e:Episodic)-[:MENTIONS]->(ent:Entity)
+WHERE e.name = "resource_24a45ed6-dd8a-450f-989d-22322edc4faf"
+RETURN e.name AS episode, ent.name AS entity;
+
+// Count entities and RELATES_TO for that episode’s mentions
+MATCH (e:Episodic)-[:MENTIONS]->(ent:Entity)
+WHERE e.name = "resource_<your-resource-id>"
+WITH e, collect(ent) AS entities
+MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity)
+WHERE a IN entities AND b IN entities
+RETURN count(DISTINCT r) AS relation_count, count(DISTINCT a) + count(DISTINCT b) AS entity_count;
+```
+
+**Cross-check**: Supabase `resources` row with same `id` should have `pipeline_stage = complete` and `failure_reason` null.
 
 ---
 
@@ -126,11 +157,11 @@ SELECT pipeline_stage, count(*) FROM resources GROUP BY pipeline_stage;
 SELECT id, url, failure_reason, updated_at
 FROM resources WHERE pipeline_stage = 'failed' ORDER BY updated_at DESC;
 
--- Recently scraped (ready for insight extraction)
+-- Recently scraped (ready for ingestion)
 SELECT id, url, pipeline_stage, scraped_content->'metadata' AS meta, updated_at
 FROM resources WHERE pipeline_stage = 'scraped' ORDER BY updated_at DESC LIMIT 10;
 
--- Recently extracted
-SELECT id, url, pipeline_stage, insight->'resource_overview'->>'summary' AS summary, updated_at
-FROM resources WHERE pipeline_stage = 'extracted' ORDER BY updated_at DESC LIMIT 10;
+-- Recently ingested (complete)
+SELECT id, url, pipeline_stage, failure_reason, updated_at
+FROM resources WHERE pipeline_stage = 'complete' ORDER BY updated_at DESC LIMIT 10;
 ```

@@ -24,6 +24,7 @@ image_base = (
         "python-dotenv",
         "pydantic-ai==1.0.5",
         "openai",
+        "graphiti-core",
     )
 )
 
@@ -131,17 +132,17 @@ async def process_llm_job(job_id: str, job_type: str, user_id: str, job_paramete
 
 @app.function(
     image=image,
-    timeout=600,  # 10 min — generous for LLM API round-trips on long content
+    timeout=600,  # 10 min — generous for Graphiti/LLM and Neo4j
     cpu=1,
     memory=1024,
     retries=1,
     secrets=_secrets,
 )
-async def extract_insights(resource_id: str) -> None:
-    """Extract insights from a scraped resource. Updates pipeline_stage and insight."""
-    from src.services.insights.service import InsightsService
+async def ingest_resource(resource_id: str) -> None:
+    """Ingest scraped resource into knowledge graph (Graphiti). Updates pipeline_stage to complete or failed."""
+    from src.services.ingestion.service import ingest_resource as _ingest
 
-    await InsightsService.extract_insights(resource_id)
+    await _ingest(resource_id)
 
 
 @app.function(

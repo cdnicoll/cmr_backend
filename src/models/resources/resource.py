@@ -10,13 +10,11 @@ class ResourceType(str, Enum):
 
 
 class PipelineStage(str, Enum):
-    """Pipeline lifecycle stage."""
+    """Pipeline lifecycle stage. Path: discovered → scraping → scraped → ingesting → complete (or failed)."""
 
     DISCOVERED = "discovered"
     SCRAPING = "scraping"
     SCRAPED = "scraped"
-    EXTRACTING = "extracting"
-    EXTRACTED = "extracted"
     INGESTING = "ingesting"
     COMPLETE = "complete"
     FAILED = "failed"

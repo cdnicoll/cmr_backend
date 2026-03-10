@@ -23,8 +23,8 @@
 
 **Purpose**: Add dependency and package structure for ingestion.
 
-- [ ] T001 [P] Add graphiti-core (and optional LLM extras if not using OpenAI) to dependencies in pyproject.toml
-- [ ] T002 [P] Create src/services/ingestion/ package with __init__.py per plan structure
+- [X] T001 [P] Add graphiti-core (and optional LLM extras if not using OpenAI) to dependencies in pyproject.toml
+- [X] T002 [P] Create src/services/ingestion/ package with __init__.py per plan structure
 
 ---
 
@@ -32,12 +32,12 @@
 
 **Purpose**: Config, secrets, and DAO that the ingestion worker depends on. No user story implementation until this phase is complete.
 
-- [ ] T003 [P] Add ingest_min_word_count (INGEST_MIN_WORD_COUNT, default 100) and ingest_stuck_timeout_minutes (INGEST_STUCK_TIMEOUT_MINUTES, default 30) to Settings in src/models/config.py
-- [ ] T004 [P] Add Neo4j and LLM env vars (neo4j_uri, neo4j_username, neo4j_password, neo4j_database; openai_api_key or equivalent for Graphiti) to Settings in src/models/config.py
-- [ ] T005 Update push_modal_secrets in src/deployment/deploy.py to include INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, Neo4j vars, and LLM/embedder vars for ingestion worker
-- [ ] T006 [P] Add atomic_transition_to_ingesting(resource_id: str) -> int in src/services/supabase/resources_dao.py (UPDATE pipeline_stage = 'ingesting' WHERE id = $1 AND pipeline_stage = 'scraped'; return row count)
-- [ ] T007 [P] Add update_resource_after_ingestion(resource_id, pipeline_stage, failure_reason=None) in src/services/supabase/resources_dao.py (set pipeline_stage and optionally failure_reason; no insight)
-- [ ] T008 [P] Update .env.example with INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, NEO4J_DATABASE, OPENAI_API_KEY (or equivalent) for ingestion
+- [X] T003 [P] Add ingest_min_word_count (INGEST_MIN_WORD_COUNT, default 100) and ingest_stuck_timeout_minutes (INGEST_STUCK_TIMEOUT_MINUTES, default 30) to Settings in src/models/config.py
+- [X] T004 [P] Add Neo4j and LLM env vars (neo4j_uri, neo4j_username, neo4j_password, neo4j_database; openai_api_key or equivalent for Graphiti) to Settings in src/models/config.py
+- [X] T005 Update push_modal_secrets in src/deployment/deploy.py to include INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, Neo4j vars, and LLM/embedder vars for ingestion worker
+- [X] T006 [P] Add atomic_transition_to_ingesting(resource_id: str) -> int in src/services/supabase/resources_dao.py (UPDATE pipeline_stage = 'ingesting' WHERE id = $1 AND pipeline_stage = 'scraped'; return row count)
+- [X] T007 [P] Add update_resource_after_ingestion(resource_id, pipeline_stage, failure_reason=None) in src/services/supabase/resources_dao.py (set pipeline_stage and optionally failure_reason; no insight)
+- [X] T008 [P] Update .env.example with INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, NEO4J_DATABASE, OPENAI_API_KEY (or equivalent) for ingestion
 
 **Checkpoint**: Foundation ready — ingestion service and Modal worker can be implemented.
 
@@ -51,9 +51,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Implement ingest_resource(resource_id) in src/services/ingestion/service.py: load resource via get_resource_by_id; require pipeline_stage == scraped and non-null scraped_content; validate word count >= ingest_min_word_count (else set failed and return per T012); call atomic_transition_to_ingesting — if 0 rows updated (already claimed or not scraped), log and return without calling Graphiti or updating resource; build episode (name e.g. resource_{id}, episode_body=markdown, source=EpisodeType.text, source_description=url/title, reference_time=resource updated_at/created_at); call Graphiti add_episode; on success call update_resource_after_ingestion(complete, failure_reason=None); on exception call update_resource_after_ingestion(failed, failure_reason)
-- [ ] T010 [US1] Add Graphiti client initialization from env (NEO4J_*, LLM vars) and structured logging (get_logger) in src/services/ingestion/service.py
-- [ ] T011 [US1] Add ingest_resource(resource_id: str) Modal function in src/deployment/modal_workers.py with image that includes graphiti-core, secrets including Neo4j and LLM, timeout 600s, and invoke ingestion service ingest_resource
+- [X] T009 [US1] Implement ingest_resource(resource_id) in src/services/ingestion/service.py: load resource via get_resource_by_id; require pipeline_stage == scraped and non-null scraped_content; validate word count >= ingest_min_word_count (else set failed and return per T012); call atomic_transition_to_ingesting — if 0 rows updated (already claimed or not scraped), log and return without calling Graphiti or updating resource; build episode (name e.g. resource_{id}, episode_body=markdown, source=EpisodeType.text, source_description=url/title, reference_time=resource updated_at/created_at); call Graphiti add_episode; on success call update_resource_after_ingestion(complete, failure_reason=None); on exception call update_resource_after_ingestion(failed, failure_reason)
+- [X] T010 [US1] Add Graphiti client initialization from env (NEO4J_*, LLM vars) and structured logging (get_logger) in src/services/ingestion/service.py
+- [X] T011 [US1] Add ingest_resource(resource_id: str) Modal function in src/deployment/modal_workers.py with image that includes graphiti-core, secrets including Neo4j and LLM, timeout 600s, and invoke ingestion service ingest_resource
 
 **Checkpoint**: User Story 1 is testable — trigger worker for scraped resource and verify complete + graph updated.
 
@@ -67,9 +67,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Ensure validation path in src/services/ingestion/service.py: when scraped_content missing or word count < ingest_min_word_count, call update_resource_after_ingestion(resource_id, failed, failure_reason="Insufficient content for ingestion" or similar) and return without calling Graphiti
-- [ ] T013 [US2] Ensure exception path in src/services/ingestion/service.py: wrap Graphiti add_episode in try/except; on exception call update_resource_after_ingestion(resource_id, failed, failure_reason=f"{type(e).__name__}: {str(e)}")
-- [ ] T014 [US2] Ensure success path clears failure_reason in src/services/ingestion/service.py by calling update_resource_after_ingestion(resource_id, complete, failure_reason=None)
+- [X] T012 [US2] Ensure validation path in src/services/ingestion/service.py: when scraped_content missing or word count < ingest_min_word_count, call update_resource_after_ingestion(resource_id, failed, failure_reason="Insufficient content for ingestion" or similar) and return without calling Graphiti
+- [X] T013 [US2] Ensure exception path in src/services/ingestion/service.py: wrap Graphiti add_episode in try/except; on exception call update_resource_after_ingestion(resource_id, failed, failure_reason=f"{type(e).__name__}: {str(e)}")
+- [X] T014 [US2] Ensure success path clears failure_reason in src/services/ingestion/service.py by calling update_resource_after_ingestion(resource_id, complete, failure_reason=None)
 
 **Checkpoint**: User Story 2 verified — validation and service failures record failure_reason; success clears it.
 
@@ -83,13 +83,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T015 [P] [US3] Remove extract_insights(resource_id) Modal function from src/deployment/modal_workers.py
-- [ ] T016 [P] [US3] Remove InsightsService.extract_insights and extract_insights call; remove or gut src/services/insights/agent.py and extract_insights logic from src/services/insights/service.py
-- [ ] T017 [P] [US3] Remove atomic_transition_to_extracting and update_resource_after_extraction from src/services/supabase/resources_dao.py and remove all imports/call sites (e.g. from insights service)
-- [ ] T018 [P] [US3] Remove insight_min_word_count, insight_stuck_timeout_minutes, model_insight_extraction (and OPENROUTER if only used for insights) from src/models/config.py
-- [ ] T019 [P] [US3] Remove insight-related vars from app-config in push_modal_secrets in src/deployment/deploy.py
-- [ ] T020 [P] [US3] Remove EXTRACTING and EXTRACTED from PipelineStage enum in src/models/resources/resource.py (or leave enum values but ensure no code transitions to them)
-- [ ] T021 [US3] Replace "Insight extraction (Phase 3)" section with "Ingest to Graphiti" in docs/runbook.md: command `modal run src.deployment.modal_workers::ingest_resource --resource-id <uuid>`, verify scraped → ingesting → complete, document failure cases (validation, Neo4j/Graphiti errors); add INGEST_* and Neo4j/LLM env vars to runbook if not already in .env.example
+- [X] T015 [P] [US3] Remove extract_insights(resource_id) Modal function from src/deployment/modal_workers.py
+- [X] T016 [P] [US3] Remove InsightsService.extract_insights and extract_insights call; remove or gut src/services/insights/agent.py and extract_insights logic from src/services/insights/service.py
+- [X] T017 [P] [US3] Remove atomic_transition_to_extracting and update_resource_after_extraction from src/services/supabase/resources_dao.py and remove all imports/call sites (e.g. from insights service)
+- [X] T018 [P] [US3] Remove insight_min_word_count, insight_stuck_timeout_minutes, model_insight_extraction (and OPENROUTER if only used for insights) from src/models/config.py
+- [X] T019 [P] [US3] Remove insight-related vars from app-config in push_modal_secrets in src/deployment/deploy.py
+- [X] T020 [P] [US3] Remove EXTRACTING and EXTRACTED from PipelineStage enum in src/models/resources/resource.py (or leave enum values but ensure no code transitions to them)
+- [X] T021 [US3] Replace "Insight extraction (Phase 3)" section with "Ingest to Graphiti" in docs/runbook.md: command `modal run src.deployment.modal_workers::ingest_resource --resource-id <uuid>`, verify scraped → ingesting → complete, document failure cases (validation, Neo4j/Graphiti errors); add INGEST_* and Neo4j/LLM env vars to runbook if not already in .env.example
 
 **Checkpoint**: Single path only; runbook and codebase describe only scraped → ingesting → complete.
 
@@ -99,7 +99,7 @@
 
 **Purpose**: Documentation and verification.
 
-- [ ] T022 [P] Verify .env.example and docs/runbook.md list all ingestion-related env vars (INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, NEO4J_*, OPENAI_API_KEY or equivalent)
+- [X] T022 [P] Verify .env.example and docs/runbook.md list all ingestion-related env vars (INGEST_MIN_WORD_COUNT, INGEST_STUCK_TIMEOUT_MINUTES, NEO4J_*, OPENAI_API_KEY or equivalent)
 - [ ] T023 Run runbook verification: manually test scraped → ingesting → complete with a real resource; test short-content and missing-content failure paths; confirm failure_reason in DB
 
 ---
