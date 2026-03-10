@@ -133,9 +133,10 @@ async def process_llm_job(job_id: str, job_type: str, user_id: str, job_paramete
 @app.function(
     image=image,
     timeout=600,  # 10 min — generous for Graphiti/LLM and Neo4j
-    cpu=1,
-    memory=1024,
+    cpu=2,
+    memory=2048,
     retries=1,
+    max_containers=10,  # cap parallel ingest jobs; queue excess (Neo4j/OpenAI friendly)
     secrets=_secrets,
 )
 async def ingest_resource(resource_id: str) -> None:
