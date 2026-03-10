@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-26
 - Supabase (PostgreSQL) — `resources` table; `scraped_content` JSONB column (existing) (003b-scraping-youtube)
 - Python 3.11+ + PydanticAI, OpenAI (or configured provider), Supabase, Modal, asyncpg (per starter) (004-insights)
 - Supabase (PostgreSQL) — `resources` table; `insight` JSONB column (existing from Phase 1) (004-insights)
+- Python 3.11 + FastAPI, Supabase (client + asyncpg where needed), Modal, httpx, feedparser (RSS), sitemap parsing (stdlib XML or small lib), YouTube Data API or equivalent for channel videos (006-content-discovery)
+- PostgreSQL (Supabase): new `discovery_sources` table; existing `resources` table (with optional `discovery_source_id` already present) (006-content-discovery)
 
 - Python 3.11+ + FastAPI, uvicorn, supabase, modal, pyjwt, cryptography, sqlalchemy, asyncpg, pydantic, pydantic-settings, httpx, python-dotenv (001-starter-application)
 
@@ -30,9 +32,9 @@ cd src && pytest && ruff check .
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 006-content-discovery: Added Python 3.11 + FastAPI, Supabase (client + asyncpg where needed), Modal, httpx, feedparser (RSS), sitemap parsing (stdlib XML or small lib), YouTube Data API or equivalent for channel videos
 - 004-insights: Added Python 3.11+ + PydanticAI, OpenAI (or configured provider), Supabase, Modal, asyncpg (per starter)
 - 003b-scraping-youtube: Added Python 3.11+ + youtube-transcript-api, Supabase, Modal (existing from Phase 2)
-- 003-scraping: Added Python 3.11+ + Crawl4AI, Supabase, Modal, asyncpg (per starter)
 
 
 <!-- MANUAL ADDITIONS START -->
