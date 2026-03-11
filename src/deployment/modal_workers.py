@@ -87,10 +87,11 @@ _secrets = [
     secrets=_secrets,
 )
 async def scrape_resource(resource_id: str) -> None:
-    """Scrape a resource by ID. Updates pipeline_stage and scraped_content."""
+    """Scrape a resource by ID. Updates pipeline_stage and scraped_content. On success, spawns ingest."""
     from src.services.scraping.service import scrape_resource as _scrape
 
     await _scrape(resource_id)
+    await ingest_resource.spawn.aio(resource_id)
 
 
 @app.function(
@@ -128,5 +129,18 @@ async def run_discovery(dry_run: bool = False) -> None:
         return
     if created_ids:
         await asyncio.gather(*[scrape_resource.spawn.aio(str(rid)) for rid in created_ids])
+
+
+@app.function(
+    image=image,
+    timeout=300,
+    schedule=modal.Period(minutes=15),
+    secrets=_secrets,
+)
+async def run_recovery_pipeline() -> None:
+    """Scheduled recovery: mark resources stuck in scraping/ingesting as failed."""
+    from src.services.orchestration.recovery import run_recovery_pipeline as _run_recovery
+
+    await _run_recovery()
 
 

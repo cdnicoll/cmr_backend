@@ -61,6 +61,7 @@ def push_modal_secrets(env: str) -> bool:
         f"ENVIRONMENT={env}",
         f"SCRAPE_MIN_WORD_COUNT={scrape_min}",
         f"INGEST_MIN_WORD_COUNT={os.environ.get('INGEST_MIN_WORD_COUNT', '100')}",
+        f"SCRAPE_STUCK_TIMEOUT_MINUTES={os.environ.get('SCRAPE_STUCK_TIMEOUT_MINUTES', '15')}",
         f"INGEST_STUCK_TIMEOUT_MINUTES={os.environ.get('INGEST_STUCK_TIMEOUT_MINUTES', '30')}",
         f"NEO4J_URI={os.environ.get('NEO4J_URI', '')}",
         f"NEO4J_USERNAME={os.environ.get('NEO4J_USERNAME', '')}",

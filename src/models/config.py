@@ -23,10 +23,6 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = Field(..., validation_alias="SUPABASE_PUBLISHABLE_KEY")
     supabase_secret_key: str = Field(..., validation_alias="SUPABASE_SECRET_KEY")
     transaction_pooler_url: str = Field(..., validation_alias="TRANSACTION_POOLER_URL")
-    job_stuck_timeout_minutes: int = Field(
-        default=15,
-        validation_alias="JOB_STUCK_TIMEOUT_MINUTES",
-    )
     modal_app_name: str = Field(default="API-develop", validation_alias="MODAL_APP_NAME")
     modal_project: str | None = Field(default=None, validation_alias="MODAL_PROJECT")  # e.g. cody-99083
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
@@ -41,6 +37,10 @@ class Settings(BaseSettings):
     ingest_min_word_count: int = Field(
         default=100,
         validation_alias="INGEST_MIN_WORD_COUNT",
+    )
+    scrape_stuck_timeout_minutes: int = Field(
+        default=15,
+        validation_alias="SCRAPE_STUCK_TIMEOUT_MINUTES",
     )
     ingest_stuck_timeout_minutes: int = Field(
         default=30,

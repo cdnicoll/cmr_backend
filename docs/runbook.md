@@ -219,6 +219,75 @@ Full flow (migration → sources → dry-run → live → idempotency): see `spe
 
 ---
 
+## Re-queue failed resource
+
+Reset a failed resource to `discovered` so it re-enters the pipeline (will be scraped again, then ingested).
+
+**SQL (Supabase SQL Editor or psql):**
+
+```sql
+UPDATE resources
+SET pipeline_stage = 'discovered', failure_reason = NULL
+WHERE id = '<uuid>';
+```
+
+**Re-trigger scrape** (then ingest will spawn automatically after scrape):
+
+```bash
+modal run src.deployment.modal_workers::scrape_resource --resource-id "<uuid>"
+```
+
+**Alternative — API**: `POST /api/v1/resources/<resource_id>/requeue` with `Authorization: Bearer $JWT_TOKEN`; returns 200 with updated resource or 404.
+
+---
+
+## Resource-pipeline recovery
+
+A scheduled Modal function runs **every 15 minutes** and marks resources stuck in `scraping` or `ingesting` (older than `SCRAPE_STUCK_TIMEOUT_MINUTES` or `INGEST_STUCK_TIMEOUT_MINUTES`) as `failed` with a clear reason (`Stuck scraping timeout` / `Stuck ingesting timeout`).
+
+**Run recovery manually:**
+
+```bash
+modal run src.deployment.modal_workers::run_recovery_pipeline
+```
+
+**Verify stuck → failed:** In Supabase, before recovery: resources in `scraping` or `ingesting` with `updated_at` older than the timeout. After recovery: those rows have `pipeline_stage = 'failed'` and `failure_reason` set. Query:
+
+```sql
+SELECT id, url, pipeline_stage, failure_reason, updated_at
+FROM resources
+WHERE pipeline_stage IN ('scraping', 'ingesting', 'failed')
+ORDER BY updated_at DESC;
+```
+
+---
+
+## Full-pipeline test
+
+1. Add a discovery source (see **Discovery: Sources and runs**); ensure at least one source has `enabled = true`.
+2. Run discovery: `modal run src.deployment.modal_workers::run_discovery --dry-run` then `modal run src.deployment.modal_workers::run_discovery`.
+3. Confirm in Supabase: new resources with `pipeline_stage = discovered`; scrape spawns automatically; after scrape, ingest spawns automatically.
+4. Confirm resources move: `discovered` → `scraping` → `scraped` → `ingesting` → `complete` (or `failed`). Check Neo4j for completed resources.
+
+Step-by-step: `specs/001-pipeline-orchestration-recovery/quickstart.md`.
+
+---
+
+## Manual triggers
+
+Use these to run pipeline stages on demand (debug, backfill, or after re-queue). Full flow: see `specs/001-pipeline-orchestration-recovery/quickstart.md`.
+
+| Action | Command |
+|--------|---------|
+| Discovery (dry-run) | `modal run src.deployment.modal_workers::run_discovery --dry-run` |
+| Discovery (live) | `modal run src.deployment.modal_workers::run_discovery` |
+| Scrape one resource | `modal run src.deployment.modal_workers::scrape_resource --resource-id "<uuid>"` |
+| Ingest one resource | `modal run src.deployment.modal_workers::ingest_resource --resource-id "<uuid>"` |
+
+After a successful scrape, ingest is spawned automatically; you only need to run `ingest_resource` manually for a single resource (e.g. re-ingest) or if scrape was run standalone.
+
+---
+
 ## Supabase: Common Queries
 
 Run in Supabase dashboard → SQL Editor.

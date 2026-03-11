@@ -1,5 +1,6 @@
 """Resources DAO — asyncpg-based CRUD for resources table."""
 import json
+from datetime import datetime
 
 import asyncpg
 
@@ -185,3 +186,70 @@ async def get_resource_by_url(url: str) -> dict | None:
                 url,
             )
             return dict(row) if row else None
+
+
+async def list_stuck_resources(
+    pipeline_stage: str, updated_before: datetime
+) -> list[str]:
+    """
+    Return resource ids where pipeline_stage = pipeline_stage and updated_at < updated_before.
+    Used by recovery to find stuck resources in scraping or ingesting.
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id FROM public.resources
+                WHERE pipeline_stage = $1 AND updated_at < $2
+                """,
+                pipeline_stage,
+                updated_before,
+            )
+            return [str(r["id"]) for r in rows]
+
+
+async def mark_resource_failed(resource_id: str, failure_reason: str) -> None:
+    """
+    Set pipeline_stage = 'failed' and failure_reason for the given resource.
+    Used by recovery for stuck scraping/ingesting timeouts.
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE public.resources
+                SET pipeline_stage = $1, failure_reason = $2
+                WHERE id = $3
+                """,
+                PipelineStage.FAILED.value,
+                failure_reason,
+                resource_id,
+            )
+
+
+async def requeue_resource(resource_id: str) -> int:
+    """
+    Set pipeline_stage = 'discovered' and failure_reason = NULL for the given resource.
+    Returns number of rows updated (1 if found, 0 if not). Leaves scraped_content unchanged.
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE public.resources
+                SET pipeline_stage = $1, failure_reason = NULL
+                WHERE id = $2
+                """,
+                PipelineStage.DISCOVERED.value,
+                resource_id,
+            )
+            return int(result.split()[-1]) if result else 0

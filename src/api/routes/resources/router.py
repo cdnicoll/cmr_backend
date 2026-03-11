@@ -1,11 +1,16 @@
 """Resources API router."""
-from fastapi import APIRouter, Depends, Request, status
+import json
+from datetime import date, datetime
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from src.api.dependencies import get_validated_jwt_user
 from src.api.schemas.resources import BatchCreateResourceRequest, BatchCreateResourceResponse
 from src.models.responses import ValidatedJWTUser
 from src.services.resources_service import batch_create
+from src.services.supabase.resources_dao import get_resource_by_id, requeue_resource
 
 
 router = APIRouter(prefix="/resources", tags=["resources"])
@@ -30,3 +35,26 @@ async def create_resources_batch(
         content=response.model_dump(mode="json"),
         status_code=status_code,
     )
+
+
+@router.post("/{resource_id}/requeue")
+async def requeue_resource_endpoint(
+    resource_id: str,
+    current_user: ValidatedJWTUser = Depends(get_validated_jwt_user),
+) -> JSONResponse:
+    """
+    Reset a failed resource to discovered so it re-enters the pipeline.
+    Returns 200 with updated resource or 404 if not found.
+    """
+    updated = await requeue_resource(resource_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+    resource = await get_resource_by_id(resource_id)
+    # Serialize for JSON (asyncpg returns datetime, UUID)
+    payload = json.loads(
+        json.dumps(
+            resource,
+            default=lambda x: x.isoformat() if isinstance(x, (datetime, date)) else str(x) if isinstance(x, UUID) else x,
+        )
+    )
+    return JSONResponse(content=payload, status_code=status.HTTP_200_OK)
