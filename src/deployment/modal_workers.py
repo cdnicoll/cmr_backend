@@ -1,4 +1,5 @@
 """Modal worker functions."""
+import asyncio
 import os
 
 import modal
@@ -40,9 +41,10 @@ discovery_image = (
 )
 
 # Browser image: Crawl4AI + Playwright — add_local must be last
+# Pin requests>=2.32 to avoid RequestsDependencyWarning with urllib3 2.x / charset_normalizer 3.x
 browser_image = (
     image_base
-    .pip_install("crawl4ai", "playwright", "youtube-transcript-api")
+    .pip_install("requests>=2.32.0", "crawl4ai", "playwright", "youtube-transcript-api")
     .apt_install(
         # Chromium/Playwright system deps (per crawl-for-ai-modal-implementation.md)
         "libglib2.0-0",
@@ -124,7 +126,7 @@ async def run_discovery(dry_run: bool = False) -> None:
     if dry_run:
         logger.info("DRY RUN: no resources created, no scrape spawned.")
         return
-    for resource_id in created_ids:
-        scrape_resource.spawn(str(resource_id))
+    if created_ids:
+        await asyncio.gather(*[scrape_resource.spawn.aio(str(rid)) for rid in created_ids])
 
 
