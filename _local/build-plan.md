@@ -293,10 +293,10 @@ Medium. Filter pipeline and deduplication are well-specified. RSS auto-discovery
 
 **What is being built**
 
-- Unified pipeline: ensure discovery → scrape → ingest (Graphiti) chain is wired end-to-end
-- Pipeline recovery: reset `failed` resources for retry, or periodic cleanup of stuck stages
-- Manual triggers for each stage (for debugging/backfill)
-- `POST /jobs/recover` (or equivalent) — starter may already have this; extend for resource pipeline jobs if needed
+- Unified pipeline: ensure discovery → scrape → ingest (Graphiti) chain is wired end-to-end (scrape spawns ingest on success)
+- Scheduled recovery: a Modal function (e.g. every 15 min) that finds resources stuck in `scraping` or `ingesting` (older than configurable timeouts) and marks them `failed` with a clear reason; no jobs table or `POST /jobs/recover` — recovery applies only to resource `pipeline_stage`
+- Manual re-queue: operators reset failed resources to `discovered` via runbook (SQL + Modal re-trigger) and optionally `POST /api/v1/resources/{id}/requeue`
+- Manual triggers for each stage (discovery dry-run, scrape one, ingest one) documented in runbook for debugging/backfill
 
 **Why at this point**
 
