@@ -3,7 +3,7 @@
 One prompt per active phase. Run each prompt in Cursor Agent mode using spec-kit.
 Save output to `_local/specs/0{N}-{phase-name}/`.
 
-Active build sequence: **Phase 1 → 2 → 2b → 4 → 5 → 8**. Phase 3 (Insights) is superseded: Graphiti is the single extractor; Phase 4 implements ingestion from scraped content and removes the Phase 3 extraction code. Prompts below for Phase 3 are for reference only; Phase 4 is the next spec to generate/refine.
+Active build sequence: **Phase 1 → 2 → 2b → 4 → 5 → 8**. Phase 3 (Insights) is superseded: Graphiti is the single extractor; Phase 4 implements ingestion from scraped content and removes the Phase 3 extraction code. **The generic job queue has been removed;** Modal workers are run_discovery, scrape_resource, ingest_resource only; Phase 8 covers resource-pipeline orchestration and recovery (not recover_orphaned_jobs). Prompts below for Phase 3 are for reference only; Phase 4 is the next spec to generate/refine.
 
 ---
 
@@ -32,7 +32,7 @@ Read the following files before creating the spec for Phase 2 only:
 - @_local/build-plan.md — for the phase scope, decisions, and test checklist
 - @_local/domain_findings/domains/02-scraping.md — for the legacy scraping logic and edge cases to preserve
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
-- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions and browser tier setup
+- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions and browser tier setup (CMR uses only scheduled function and spawn patterns: scrape_resource, run_discovery; no job queue or process_*_job)
 
 Create a spec for Phase 2: Scraping — Crawl4AI Integration only. Do not plan beyond this phase.
 ```
@@ -47,7 +47,7 @@ Read the following files before creating the spec for Phase 2b only:
 - @_local/build-plan.md — for the phase scope, decisions, and test checklist
 - @_local/domain_findings/domains/02-scraping.md — for the legacy YouTube handling logic to preserve
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
-- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions
+- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions (CMR uses only scrape_resource / run_discovery; no job queue)
 - @specs/003-scraping/ — for the existing website scraping pattern this phase extends
 
 Phase 2b extends the existing `scrape_resource` Modal function to handle `type = youtube` resources using `youtube-transcript-api`. Crawl4AI does not support YouTube. The extraction path, `scraped_content` JSONB schema, `pipeline_stage` transitions, and failure handling are identical to Phase 2 — only the extraction library differs. No new tables, no new Modal functions.
@@ -72,7 +72,7 @@ Read the following files before creating the spec for Phase 4 only:
 - @_local/domain_findings/domains/04-knowledge-graph.md — for the legacy Graphiti ingestion logic and edge cases to preserve
 - @_local/domain_findings/domains/03-insights.md — for legacy context (extraction intent; Graphiti now does this)
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
-- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions
+- @_local/starter-kit/modal-jobs.md — for the Modal worker conventions (CMR: ingest_resource only; no job queue)
 - Graphiti docs / examples: https://github.com/getzep/graphiti — add_episode (or equivalent) API for ingesting text; Graphiti performs LLM extraction, entity merge, temporal edges
 
 Phase 4 scope:
@@ -95,7 +95,7 @@ Read the following files before creating the spec for Phase 5 only:
 - @_local/domain_findings/domains/08-content-discovery.md — for the legacy discovery logic and edge cases to preserve
 - @_local/domain_findings/domains/09-scheduled-pipeline.md — for the legacy scheduling and orchestration context
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
-- @_local/starter-kit/modal-jobs.md — for the Modal scheduled function conventions
+- @_local/starter-kit/modal-jobs.md — for the Modal scheduled function conventions (CMR: run_discovery; no job queue)
 - @_local/starter-kit/data-layer.md — for migration patterns (discovery_sources table)
 
 Discovery has three source types tracked in the `discovery_sources` table (`source_type`: `sitemap`, `rss`, `youtube_channel`). Each produces resources (web article URLs or YouTube video URLs) that enter the pipeline at `pipeline_stage = discovered`.
@@ -113,8 +113,10 @@ Read the following files before creating the spec for Phase 8 only:
 - @_local/build-plan.md — for the phase scope, decisions, and test checklist
 - @_local/domain_findings/domains/09-scheduled-pipeline.md — for the legacy orchestration and recovery logic to preserve
 - @_local/starter-kit/patterns.md — for how new features are structured in this codebase
-- @_local/starter-kit/modal-jobs.md — for the Modal scheduled function and recovery worker conventions
+- @_local/starter-kit/modal-jobs.md — for the Modal scheduled function and spawn patterns (CMR has no recover_orphaned_jobs; Phase 8 adds resource-pipeline recovery)
 - @_local/starter-kit/stack-wiring.md — for how the app bootstraps and how async patterns are wired
+
+Phase 8 scope: Orchestration is discovery → scrape → ingest (spawn chain). Recovery is for resources (stuck scraping/ingesting), not the jobs table. Phase 8 adds a resource-pipeline recovery pattern (e.g. scheduled function to mark stuck resources failed); do not reintroduce recover_orphaned_jobs.
 
 Create a spec for Phase 8: Pipeline Orchestration and Recovery only. Do not plan beyond this phase.
 ```

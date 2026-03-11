@@ -21,6 +21,12 @@ psql "$TRANSACTION_POOLER_URL" -f docs/db/migrations/005_discovery_first_run_at.
 
 Or run the SQL in Supabase Dashboard → SQL Editor (contents of each file). Migration 005 adds `first_run_at` for first-run vs ongoing limits.
 
+**Drop legacy job queue (optional):** If the DB was created with the starter `001_jobs.sql` (jobs table and PGMQ), apply `006_drop_jobs.sql` to remove them. CMR uses only the resource pipeline (discovery, scrape, ingest); no POST /jobs.
+
+```bash
+psql "$TRANSACTION_POOLER_URL" -f docs/db/migrations/006_drop_jobs.sql
+```
+
 ---
 
 ## JWT
@@ -44,6 +50,8 @@ uv run deploy_prod   # production
 ```
 
 **New env vars**: Add to both `.env` and `push_modal_secrets()` in `src/deployment/deploy.py`.
+
+Generic job queue (POST /jobs, recover_orphaned_jobs) has been removed; the pipeline uses only discovery, scrape, and ingest workers.
 
 ---
 

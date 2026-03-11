@@ -93,53 +93,6 @@ async def scrape_resource(resource_id: str) -> None:
 
 @app.function(
     image=image,
-    timeout=300,
-    secrets=_secrets,
-)
-async def process_sample_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Process sample_task job."""
-    await _process_job(job_id, job_type, user_id, job_parameters)
-
-
-# Tiered workers (stubs for future job types per modal-jobs.md)
-@app.function(
-    image=image,
-    timeout=900,  # 15 min
-    cpu=4,
-    memory=8192,  # 8GB
-    secrets=_secrets,
-)
-async def process_gpu_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Process GPU-tier jobs (e.g. document_index)."""
-    await _process_job(job_id, job_type, user_id, job_parameters)
-
-
-@app.function(
-    image=image,
-    timeout=300,  # 5 min
-    cpu=2,
-    memory=2048,  # 2GB
-    secrets=_secrets,
-)
-async def process_browser_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Process browser-tier jobs (e.g. web_crawl)."""
-    await _process_job(job_id, job_type, user_id, job_parameters)
-
-
-@app.function(
-    image=image,
-    timeout=300,  # 5 min
-    cpu=1,
-    memory=1024,  # 1GB
-    secrets=_secrets,
-)
-async def process_llm_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Process LLM-tier jobs (e.g. document_process, llm_task)."""
-    await _process_job(job_id, job_type, user_id, job_parameters)
-
-
-@app.function(
-    image=image,
     timeout=600,  # 10 min — generous for Graphiti/LLM and Neo4j
     cpu=2,
     memory=2048,
@@ -152,18 +105,6 @@ async def ingest_resource(resource_id: str) -> None:
     from src.services.ingestion.service import ingest_resource as _ingest
 
     await _ingest(resource_id)
-
-
-@app.function(
-    image=image,
-    timeout=120,  # 2 min
-    cpu=0.5,
-    memory=512,
-    secrets=_secrets,
-)
-async def process_api_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Process API-tier jobs (e.g. company_enrich)."""
-    await _process_job(job_id, job_type, user_id, job_parameters)
 
 
 @app.function(
@@ -187,36 +128,3 @@ async def run_discovery(dry_run: bool = False) -> None:
         scrape_resource.spawn(str(resource_id))
 
 
-@app.function(
-    image=image,
-    timeout=300,
-    schedule=modal.Period(minutes=15),
-    secrets=_secrets,
-)
-async def recover_orphaned_jobs() -> None:
-    """Scheduled recovery: mark stuck and orphaned jobs as failed."""
-    from src.services.job_queue import database
-
-    stuck = await database.find_stuck_jobs()
-    orphaned = await database.find_orphaned_jobs()
-
-    for job in stuck:
-        await database.mark_job_failed(
-            str(job["id"]),
-            "Job exceeded maximum processing time",
-            "JobTimeoutError",
-        )
-    for job in orphaned:
-        await database.mark_job_failed(
-            str(job["id"]),
-            "Job never started (pending timeout)",
-            "PendingTimeoutError",
-        )
-
-
-async def _process_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
-    """Shared job processing logic."""
-    from src.services.job_queue.service import JobQueueService
-
-    svc = JobQueueService()
-    await svc.process_job(job_id, job_type, user_id, job_parameters)

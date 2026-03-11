@@ -22,14 +22,14 @@ The starter kit already provides:
 |-----------|--------|
 | **FastAPI app** | Entry point, lifespan, middleware (CORS, metrics, rate limit, request ID) |
 | **Supabase** | Client factory, PostgREST, RLS |
-| **Transaction pooler** | asyncpg/SQLAlchemy for jobs, PGMQ |
+| **Transaction pooler** | asyncpg for resources, discovery_sources, etc. (PGMQ removed) |
 | **Auth** | JWT verification via Supabase JWKS, `get_current_user`, `get_validated_jwt_user` |
-| **Jobs** | `jobs` table, `JobQueueService`, PGMQ backup, Modal spawner |
-| **Modal** | API deployment, worker tiers (GPU, browser, LLM, API), recovery worker |
+| **Jobs** | **Removed for CMR.** No `jobs` table, no PGMQ, no POST /jobs; pipeline uses only resource pipeline. |
+| **Modal** | Three workers only: run_discovery (scheduled), scrape_resource, ingest_resource; no process_*_job tiers, no recover_orphaned_jobs. |
 | **Health** | `/health`, `/health/db` |
-| **Patterns** | Service → DAO, `POST /jobs`, `GET /jobs`, `GET /jobs/{id}` |
-| **Recovery** | `recover_orphaned_jobs` (scheduled every 15 min) |
-| **Migration** | Script pattern, PGMQ setup |
+| **Patterns** | Service → DAO; no job queue API. |
+| **Recovery** | **Removed** (recover_orphaned_jobs dropped); Phase 8 adds resource-pipeline recovery (stuck scraping/ingesting). |
+| **Migration** | Script pattern; 006_drop_jobs removes jobs table and PGMQ. |
 
 **Not present and must be built:** Resources domain, scraping (Crawl4AI), Graphiti/Neo4j ingestion (from scraped content; Graphiti is the single extractor), content discovery, and the resource pipeline orchestration. (No separate "insights agent" — extraction is done by Graphiti during ingestion.)
 

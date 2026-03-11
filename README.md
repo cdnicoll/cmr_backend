@@ -1,17 +1,14 @@
 # CMR Backend
 
-FastAPI backend with background jobs, Modal workers, and Supabase. A starter application for building async job-processing APIs.
+FastAPI backend with Modal workers and Supabase. Content pipeline: discovery (sitemap/RSS/YouTube) → scrape → ingest (Graphiti/Neo4j).
 
 ## Overview
 
 This project provides:
 
-- **REST API** — FastAPI with health checks, JWT auth, and job management
-- **Background jobs** — Create jobs via `POST /jobs`; workers process them asynchronously on Modal
-- **Job lifecycle** — Jobs flow through `pending` → `processing` → `completed` or `failed`; a scheduled recovery worker marks stuck/orphaned jobs as failed
-- **Sample worker** — `sample_task` demonstrates the pattern for adding new job types (GPU, browser, LLM, API tiers)
-
-All job endpoints require JWT authentication. Jobs are user-scoped (you only see your own).
+- **REST API** — FastAPI with health checks, JWT auth, and resources API (batch create URLs)
+- **Resource pipeline** — Discovery runs on a schedule; new URLs become resources; scrape and ingest workers process them. Three Modal workers: run_discovery, scrape_resource, ingest_resource.
+- **No generic job queue** — CMR does not use POST /jobs or a jobs table; the pipeline is driven by discovery and spawns (scrape → ingest).
 
 ## Prerequisites
 
@@ -37,15 +34,11 @@ cp .env.example .env
 # Edit .env with your Supabase and Modal credentials
 ```
 
-Required variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `TRANSACTION_POOLER_URL`. Optional: `ENVIRONMENT`, `JOB_STUCK_TIMEOUT_MINUTES`, `MODAL_PROJECT`.
+Required variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `TRANSACTION_POOLER_URL`. Optional: `ENVIRONMENT`, `MODAL_PROJECT`.
 
 ### 3. Database migration
 
-```bash
-uv run python scripts/migrate.py
-```
-
-Creates the `jobs` table and PGMQ `job_queue`.
+Apply migrations for resources and discovery. See `docs/runbook.md` for exact steps (e.g. `psql "$TRANSACTION_POOLER_URL" -f docs/db/migrations/002_resources.sql`, then 004 and 005 for discovery). If the DB had the starter jobs table, apply `006_drop_jobs.sql` to remove it and PGMQ.
 
 ### 4. Run locally
 
@@ -57,11 +50,11 @@ API: **http://localhost:8000** · Docs: **http://localhost:8000/docs**
 
 ### Verify
 
-| Action      | Command / URL                          |
-|-------------|----------------------------------------|
-| Health      | `curl http://localhost:8000/health`    |
-| DB health   | `curl http://localhost:8000/health/db` |
-| Create job  | `POST /jobs` with `Authorization: Bearer <JWT>` and `{"job_type":"sample_task","job_parameters":{}}` |
+| Action        | Command / URL                                       |
+|---------------|-----------------------------------------------------|
+| Health        | `curl http://localhost:8000/health`                 |
+| DB health     | `curl http://localhost:8000/health/db`              |
+| Create resources | `POST /api/v1/resources` with `Authorization: Bearer <JWT>` and `{"urls":["https://example.com"]}` |
 
 ## Project Structure
 
@@ -69,13 +62,13 @@ API: **http://localhost:8000** · Docs: **http://localhost:8000/docs**
 src/
 ├── api/              # FastAPI app, routes, dependencies
 ├── config/           # Supabase, database connection
-├── deployment/       # Modal app, workers, deploy script
+├── deployment/       # Modal app, workers (discovery, scrape, ingest), deploy script
 ├── middleware/      # CORS, metrics, request ID
-├── models/          # Config, jobs, responses
-├── services/        # Job queue (database, queue, spawner, service)
+├── models/          # Config, resources, responses
+├── services/        # Discovery, scraping, ingestion, supabase DAOs
 └── utils/            # Logging
-scripts/              # migrate.py, dev.py, create_modal_secrets.sh
-docs/                 # quickstart.md, conventions.md
+scripts/              # dev.py, create_modal_secrets.sh
+docs/                 # runbook.md, db/migrations
 ```
 
 ## Deploy to Modal

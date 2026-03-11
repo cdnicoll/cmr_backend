@@ -59,7 +59,6 @@ def push_modal_secrets(env: str) -> bool:
         "--force",
         app_secret,
         f"ENVIRONMENT={env}",
-        f"JOB_STUCK_TIMEOUT_MINUTES={os.environ.get('JOB_STUCK_TIMEOUT_MINUTES', '15')}",
         f"SCRAPE_MIN_WORD_COUNT={scrape_min}",
         f"INGEST_MIN_WORD_COUNT={os.environ.get('INGEST_MIN_WORD_COUNT', '100')}",
         f"INGEST_STUCK_TIMEOUT_MINUTES={os.environ.get('INGEST_STUCK_TIMEOUT_MINUTES', '30')}",

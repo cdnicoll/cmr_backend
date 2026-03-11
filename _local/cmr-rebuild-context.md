@@ -333,6 +333,7 @@ Write the plan as if it will be handed to a developer who will use it to write o
 | 8 — Orchestration & Recovery | Next |
 
 Key outcomes to date:
+- **Generic job queue removed:** The jobs API (POST /jobs), job_queue service, process_*_job workers, and recover_orphaned_jobs have been dropped. The pipeline uses only three Modal workers: run_discovery, scrape_resource, ingest_resource. Migration 006 drops the jobs table and PGMQ.
 - Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
 - **Graphiti as single extractor (Option B2):** Ingestion reads scraped content and sends it to Graphiti; Graphiti does LLM extraction and writes to Neo4j. Phase 4 implemented the ingestion worker and removed the Phase 3 extraction code (agent, service, Modal function, DAO methods, insight column).
 - **Phase 5 (Content Discovery):** `discovery_sources` table and migration; sitemap, RSS, and YouTube channel scanners; discovery service with per-source URLs, dedupe via `get_existing_urls`, per-source `batch_create` with `discovery_source_id`; Modal `run_discovery` with `schedule=modal.Period(days=1)`, dry-run support, and scrape spawn for created resources only. Runbook documents migration, adding sources, and running discovery (dry-run then live).
