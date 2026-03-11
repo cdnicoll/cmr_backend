@@ -1,7 +1,7 @@
 """Modal ASGI app for API deployment."""
 import modal
 
-app = modal.App("API-develop")
+app = modal.App("CMR-API-develop")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")

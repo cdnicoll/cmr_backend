@@ -5,7 +5,7 @@ import modal
 
 # Environment-driven app name (set by deploy script or .env)
 _env = os.environ.get("ENVIRONMENT", "develop")
-app = modal.App(f"Job-Worker-{_env}")
+app = modal.App(f"CMR-{_env}")
 
 # Base image: pip deps only (add_local must be last per Modal)
 image_base = (
@@ -110,7 +110,7 @@ async def ingest_resource(resource_id: str) -> None:
 @app.function(
     image=discovery_image,
     timeout=600,  # 10 min for tens of sources
-    schedule=modal.Period(days=1),
+    schedule=modal.Period(hours=6),
     secrets=_secrets,
 )
 async def run_discovery(dry_run: bool = False) -> None:
