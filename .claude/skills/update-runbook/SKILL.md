@@ -34,7 +34,7 @@ Read `.claude/skills/update-runbook/section-template.md` for the exact template.
 
 Before adding or updating a pillar, always read:
 - `specs/NNN-name/quickstart.md` — primary source for commands and verify steps
-- `_local/cmr-rebuild-context.md` — for resolved decisions that affect the section (env vars, config, library choices)
+- `_local/README.md` — for resolved decisions and config that affect the section (env vars, deploy, library choices)
 
 Do not invent commands. Read the source first.
 
@@ -50,6 +50,6 @@ Do not invent commands. Read the source first.
 
 1. Read `$ARGUMENTS` to understand what changed (new phase complete, command updated, env var added, etc.)
 2. Identify which section needs to change — add a new pillar or update an existing one
-3. Read the relevant `specs/NNN-name/quickstart.md` and `_local/cmr-rebuild-context.md`
+3. Read the relevant `specs/NNN-name/quickstart.md` and `_local/README.md`
 4. Apply the change using the section template
 5. Do not reformat, reorder, or touch anything else

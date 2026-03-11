@@ -2,9 +2,8 @@
 
 ## Current status
 
-**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube), Phase 4 (Knowledge Graph — Graphiti Ingestion from scraped content). Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 removed the Phase 3 extraction code.  
-**Next:** Phase 5 (Content Discovery — Sitemap, RSS, and YouTube), then Phase 8 (Orchestration).  
-**Runbook:** Commands for testing each pipeline stage (resources, scrape, ingest) are in `docs/runbook.md`.
+**Complete:** Phase 1 (Foundation), Phase 2 (Scraping — Crawl4AI), Phase 2b (YouTube), Phase 4 (Knowledge Graph — Graphiti Ingestion from scraped content), Phase 5 (Content Discovery), Phase 8 (Pipeline Orchestration and Recovery). Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 removed the Phase 3 extraction code.  
+**Runbook:** Commands for each pipeline stage (resources, scrape, ingest, recovery, re-queue) are in `docs/runbook.md`.
 
 ---
 

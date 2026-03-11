@@ -1,6 +1,6 @@
 # CMR Backend — Developer Runbook
 
-Commands for testing individual pipeline stages. No explanations — see `_local/` and `specs/` for context.
+Commands for testing individual pipeline stages. No explanations — see `_local/README.md` and `specs/` for context.
 
 ---
 

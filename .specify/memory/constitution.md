@@ -110,7 +110,7 @@ across contributors. Rules enable AI assistants to produce aligned output.
 - All PRs and reviews MUST verify compliance with these principles. Complexity
   that violates principles MUST be justified in the plan's Complexity Tracking
   table.
-- Use `.cursor/rules/`, `_local/starter-kit/`, and `docs/` for runtime development
+- Use `.cursor/rules/`, `_local/README.md`, and `docs/` for runtime development
   guidance.
 
 **Version**: 1.0.0 | **Ratified**: 2025-02-26 | **Last Amended**: 2025-02-26
