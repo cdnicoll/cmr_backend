@@ -3,14 +3,21 @@ from uuid import UUID
 
 from src.api.schemas.resources import BatchCreateResourceResponse, ResourceResult
 from src.utils.logging import get_logger
-from src.services.supabase.resources_dao import get_resource_by_url, insert_resource
+from src.services.supabase.resources_dao import (
+    get_resource_by_url,
+    insert_resource,
+)
 from src.utils.url_validation import validate_url
 
 
 logger = get_logger(__name__)
 
 
-async def batch_create(urls: list[str], request_id: str | None = None) -> BatchCreateResourceResponse:
+async def batch_create(
+    urls: list[str],
+    request_id: str | None = None,
+    discovery_source_id: str | None = None,
+) -> BatchCreateResourceResponse:
     """
     Validate each URL, insert new resources, skip duplicates.
     Returns batch response with created/skipped/errors counts and per-URL results.
@@ -55,7 +62,9 @@ async def batch_create(urls: list[str], request_id: str | None = None) -> BatchC
             continue
 
         # Insert new resource
-        row = await insert_resource(normalized_url, resource_type)
+        row = await insert_resource(
+            normalized_url, resource_type, discovery_source_id=discovery_source_id
+        )
         if row:
             created += 1
             results.append(

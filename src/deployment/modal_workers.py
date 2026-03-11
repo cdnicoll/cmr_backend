@@ -10,6 +10,7 @@ app = modal.App(f"Job-Worker-{_env}")
 # Base image: pip deps only (add_local must be last per Modal)
 image_base = (
     modal.Image.debian_slim(python_version="3.11")
+    .env({"PYTHONUNBUFFERED": "1"})
     .pip_install(
         "fastapi",
         "uvicorn",
@@ -30,6 +31,13 @@ image_base = (
 
 # Standard image for most workers
 image = image_base.add_local_python_source("src")
+
+# Discovery image: feedparser (RSS) + YouTube Data API client for run_discovery
+discovery_image = (
+    image_base
+    .pip_install("feedparser", "google-api-python-client")
+    .add_local_python_source("src")
+)
 
 # Browser image: Crawl4AI + Playwright — add_local must be last
 browser_image = (
@@ -156,6 +164,27 @@ async def ingest_resource(resource_id: str) -> None:
 async def process_api_job(job_id: str, job_type: str, user_id: str, job_parameters: dict) -> None:
     """Process API-tier jobs (e.g. company_enrich)."""
     await _process_job(job_id, job_type, user_id, job_parameters)
+
+
+@app.function(
+    image=discovery_image,
+    timeout=600,  # 10 min for tens of sources
+    schedule=modal.Period(days=1),
+    secrets=_secrets,
+)
+async def run_discovery(dry_run: bool = False) -> None:
+    """Daily discovery: sitemap/RSS/YouTube → net-new resources → spawn scrape for created only."""
+    from src.utils.logging import get_logger
+
+    from src.services.discovery.service import run_discovery as _run_discovery
+
+    logger = get_logger(__name__)
+    created_ids = await _run_discovery(dry_run=dry_run)
+    if dry_run:
+        logger.info("DRY RUN: no resources created, no scrape spawned.")
+        return
+    for resource_id in created_ids:
+        scrape_resource.spawn(str(resource_id))
 
 
 @app.function(

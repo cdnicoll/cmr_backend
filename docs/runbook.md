@@ -12,6 +12,15 @@ cp .env.example .env   # fill in credentials
 uv run python scripts/migrate.py
 ```
 
+**Discovery table**: To enable content discovery (sitemap/RSS/YouTube), apply the discovery_sources migrations once:
+
+```bash
+psql "$TRANSACTION_POOLER_URL" -f docs/db/migrations/004_discovery_sources.sql
+psql "$TRANSACTION_POOLER_URL" -f docs/db/migrations/005_discovery_first_run_at.sql
+```
+
+Or run the SQL in Supabase Dashboard → SQL Editor (contents of each file). Migration 005 adds `first_run_at` for first-run vs ongoing limits.
+
 ---
 
 ## JWT
@@ -142,6 +151,63 @@ RETURN count(DISTINCT r) AS relation_count, count(DISTINCT a) + count(DISTINCT b
 ```
 
 **Cross-check**: Supabase `resources` row with same `id` should have `pipeline_stage = complete` and `failure_reason` null.
+
+---
+
+## Discovery: Sources and runs
+
+Discovery reads from the `discovery_sources` table (apply migration once; see **Setup**). Only rows with `enabled = true` are used. Per-source config is in the `config` JSONB column.
+
+**Add/update sources** (Supabase SQL Editor or psql):
+
+```sql
+-- Sitemap
+INSERT INTO discovery_sources (id, source_type, name, config, enabled)
+VALUES (
+  gen_random_uuid(),
+  'sitemap',
+  'My sitemap',
+  '{"url": "https://example.com/sitemap.xml", "days_back": 7, "require_https": true}'::jsonb,
+  true
+);
+
+-- RSS
+INSERT INTO discovery_sources (id, source_type, name, config, enabled)
+VALUES (
+  gen_random_uuid(),
+  'rss',
+  'My RSS',
+  '{"feed_url": "https://example.com/feed.xml", "days_back": 14}'::jsonb,
+  true
+);
+
+-- YouTube (requires YOUTUBE_API_KEY in Modal secret / .env)
+INSERT INTO discovery_sources (id, source_type, name, config, enabled)
+VALUES (
+  gen_random_uuid(),
+  'youtube_channel',
+  'My channel',
+  '{"channel_id": "UCxxxxxx", "max_videos": 20}'::jsonb,
+  true
+);
+```
+
+**Enable/disable**: `UPDATE discovery_sources SET enabled = false WHERE id = '<uuid>';` (or `true` to enable).
+
+**Run discovery** (dry-run first, then live):
+
+```bash
+modal run src.deployment.modal_workers::run_discovery --dry-run
+modal run src.deployment.modal_workers::run_discovery
+```
+
+**Verify**: New rows in `resources` with `pipeline_stage = discovered`, `discovery_source_id` set. Scrape jobs spawned for each new resource. Re-run discovery with same sources → no duplicate URLs (idempotent).
+
+**Troubleshooting**: No sources run → check `enabled = true` and `source_type` in `sitemap`, `rss`, `youtube_channel`. YouTube errors → set `YOUTUBE_API_KEY` in Modal secret `app-config-{env}` (and in `.env` for local). One failing source does not stop others; check logs for which source failed.
+
+**First run vs ongoing**: The first time a source is included in a non–dry_run discovery run, discovery uses tight initial limits so only the most recent items are pulled. After that run, the source is marked and subsequent runs use the normal config (`days_back`, `max_videos`, etc.). You can tune first-run behavior via optional `initial_days_back`, `initial_max_urls` (sitemap), or `initial_max_videos` (YouTube) in the source `config`, or via env: `DISCOVERY_INITIAL_DAYS_BACK`, `DISCOVERY_INITIAL_MAX_URLS`, `DISCOVERY_INITIAL_MAX_VIDEOS`. To re-onboard a source (treat as first run again), set `first_run_at = NULL` for that row. Requires migration `docs/db/migrations/005_discovery_first_run_at.sql` (adds `first_run_at` column).
+
+Full flow (migration → sources → dry-run → live → idempotency): see `specs/006-content-discovery/quickstart.md`.
 
 ---
 

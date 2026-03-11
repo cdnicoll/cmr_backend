@@ -126,7 +126,11 @@ async def update_resource_after_scrape(
             )
 
 
-async def insert_resource(url: str, resource_type: str) -> dict | None:
+async def insert_resource(
+    url: str,
+    resource_type: str,
+    discovery_source_id: str | None = None,
+) -> dict | None:
     """
     Insert a new resource. Returns the inserted row or None on unique constraint violation (duplicate).
     """
@@ -138,18 +142,35 @@ async def insert_resource(url: str, resource_type: str) -> dict | None:
             try:
                 row = await conn.fetchrow(
                     """
-                    INSERT INTO public.resources (url, type, pipeline_stage)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO public.resources (url, type, pipeline_stage, discovery_source_id)
+                    VALUES ($1, $2, $3, $4)
                     RETURNING id, url, title, type, pipeline_stage, failure_reason,
                         scraped_content, discovery_source_id, created_at, updated_at
                     """,
                     url,
                     resource_type,
                     PipelineStage.DISCOVERED.value,
+                    discovery_source_id,
                 )
                 return dict(row) if row else None
             except asyncpg.UniqueViolationError:
                 return None
+
+
+async def get_existing_urls(urls: list[str]) -> set[str]:
+    """Return the set of URLs that already exist in resources. Used for deduplication."""
+    if not urls:
+        return set()
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT url FROM public.resources WHERE url = ANY($1::text[])",
+                urls,
+            )
+            return {r["url"] for r in rows}
 
 
 async def get_resource_by_url(url: str) -> dict | None:

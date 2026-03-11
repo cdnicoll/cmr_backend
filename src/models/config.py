@@ -51,6 +51,28 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(default="", validation_alias="NEO4J_PASSWORD")
     neo4j_database: str = Field(default="neo4j", validation_alias="NEO4J_DATABASE")
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    # Discovery defaults (per research.md and plan)
+    discovery_days_back_default: int = Field(
+        default=14,
+        validation_alias="DISCOVERY_DAYS_BACK_DEFAULT",
+    )
+    discovery_batch_size: int = Field(
+        default=50,
+        validation_alias="DISCOVERY_BATCH_SIZE",
+    )
+    # First-run vs ongoing: tight limits on first discovery run per source
+    discovery_initial_days_back: int = Field(
+        default=1,
+        validation_alias="DISCOVERY_INITIAL_DAYS_BACK",
+    )
+    discovery_initial_max_urls: int = Field(
+        default=20,
+        validation_alias="DISCOVERY_INITIAL_MAX_URLS",
+    )
+    discovery_initial_max_videos: int = Field(
+        default=10,
+        validation_alias="DISCOVERY_INITIAL_MAX_VIDEOS",
+    )
 
 
 @lru_cache

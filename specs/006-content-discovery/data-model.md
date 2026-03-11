@@ -15,12 +15,13 @@ Stores each monitored source (sitemap, RSS feed, or YouTube channel) with type, 
 | enabled | boolean | Yes | If false, source is skipped by discovery runs. Default true. |
 | created_at | timestamptz | Yes | Set on insert |
 | updated_at | timestamptz | Yes | Updated on change |
+| first_run_at | timestamptz | No | Set after first non–dry_run run that includes this source; NULL = use initial limits on next run |
 
 ### config by source_type
 
-- **sitemap**: `{ "url": "<sitemap URL>", "days_back": number?, "require_https": bool?, "required_path_patterns": string[]?, "excluded_path_patterns": string[]?, "max_path_depth": number? }`
-- **rss**: `{ "feed_url": "<RSS feed URL>", "days_back": number?, "min_relevance_score": number?, "require_https": bool? }`
-- **youtube_channel**: `{ "channel_id": "<YouTube channel ID>", "max_videos": number? }` (e.g. 50 for recent N videos)
+- **sitemap**: `{ "url": "<sitemap URL>", "days_back": number?, "require_https": bool?, "required_path_patterns": string[]?, "excluded_path_patterns": string[]?, "max_path_depth": number?, "initial_days_back": number?, "initial_max_urls": number? }` — optional `initial_*` for first-run limits.
+- **rss**: `{ "feed_url": "<RSS feed URL>", "days_back": number?, "min_relevance_score": number?, "require_https": bool?, "initial_days_back": number? }` — optional `initial_days_back` for first run.
+- **youtube_channel**: `{ "channel_id": "<YouTube channel ID>", "max_videos": number?, "initial_max_videos": number? }` (e.g. 50 for ongoing; optional `initial_max_videos` for first run)
 
 Validation rules:
 
@@ -45,6 +46,8 @@ Discovery sources do not have a state machine; they are either enabled or disabl
 
 - **File**: `docs/db/migrations/004_discovery_sources.sql`
 - **Contents**: Create `discovery_sources` with columns above; unique index not required on (source_type, config) unless we want to prevent duplicate configs; index on `enabled` for listing enabled sources. Optionally add FK from `resources.discovery_source_id` to `discovery_sources(id)`.
+- **File**: `docs/db/migrations/005_discovery_first_run_at.sql`
+- **Contents**: Add `first_run_at TIMESTAMPTZ NULL` to `discovery_sources` for first-run vs ongoing behavior.
 
 ---
 

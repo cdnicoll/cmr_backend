@@ -23,9 +23,9 @@
 
 **Purpose**: Project initialization, discovery package structure, and dependencies for discovery workers.
 
-- [ ] T001 Create discovery domain package: `src/services/discovery/__init__.py`, and placeholder modules for `service`, `sitemap_scanner`, `rss_scanner`, `youtube_scanner` in `src/services/discovery/`
-- [ ] T002 [P] Add discovery worker dependencies to Modal image in `src/deployment/modal_workers.py`: `feedparser` (RSS) and YouTube Data API client (e.g. `google-api-python-client` or httpx-based) so `run_discovery` can run sitemap/RSS/YouTube scanners
-- [ ] T003 [P] Add optional discovery config defaults in `src/models/config.py`: e.g. `DISCOVERY_DAYS_BACK_DEFAULT`, `DISCOVERY_BATCH_SIZE` (per research.md and plan)
+- [X] T001 Create discovery domain package: `src/services/discovery/__init__.py`, and placeholder modules for `service`, `sitemap_scanner`, `rss_scanner`, `youtube_scanner` in `src/services/discovery/`
+- [X] T002 [P] Add discovery worker dependencies to Modal image in `src/deployment/modal_workers.py`: `feedparser` (RSS) and YouTube Data API client (e.g. `google-api-python-client` or httpx-based) so `run_discovery` can run sitemap/RSS/YouTube scanners
+- [X] T003 [P] Add optional discovery config defaults in `src/models/config.py`: e.g. `DISCOVERY_DAYS_BACK_DEFAULT`, `DISCOVERY_BATCH_SIZE` (per research.md and plan)
 
 ---
 
@@ -33,11 +33,11 @@
 
 **Purpose**: Data layer and resource creation extensions that ALL user stories depend on. No user story work can begin until this phase is complete.
 
-- [ ] T004 Document migration application in `docs/runbook.md`: add step to apply `docs/db/migrations/004_discovery_sources.sql` (or via existing `scripts/migrate.py` if migration runner includes it)
-- [ ] T005 [P] Implement discovery_sources DAO in `src/services/supabase/discovery_sources_dao.py`: `list_enabled_sources()` returning enabled rows, `get_by_id(id)` for single source; use asyncpg and `load_settings().transaction_pooler_url` per existing DAO pattern
-- [ ] T006 Extend `insert_resource` in `src/services/supabase/resources_dao.py`: add optional parameter `discovery_source_id: str | None = None`; include it in INSERT and RETURNING
-- [ ] T007 Add `get_existing_urls(urls: list[str]) -> set[str]` in `src/services/supabase/resources_dao.py`: single query returning set of URLs that already exist in `resources` for deduplication
-- [ ] T008 Extend `batch_create` in `src/services/resources_service.py`: add optional parameter `discovery_source_id: str | None = None`; pass it through to each `insert_resource` call for created resources
+- [X] T004 Document migration application in `docs/runbook.md`: add step to apply `docs/db/migrations/004_discovery_sources.sql` (or via existing `scripts/migrate.py` if migration runner includes it)
+- [X] T005 [P] Implement discovery_sources DAO in `src/services/supabase/discovery_sources_dao.py`: `list_enabled_sources()` returning enabled rows, `get_by_id(id)` for single source; use asyncpg and `load_settings().transaction_pooler_url` per existing DAO pattern
+- [X] T006 Extend `insert_resource` in `src/services/supabase/resources_dao.py`: add optional parameter `discovery_source_id: str | None = None`; include it in INSERT and RETURNING
+- [X] T007 Add `get_existing_urls(urls: list[str]) -> set[str]` in `src/services/supabase/resources_dao.py`: single query returning set of URLs that already exist in `resources` for deduplication
+- [X] T008 Extend `batch_create` in `src/services/resources_service.py`: add optional parameter `discovery_source_id: str | None = None`; pass it through to each `insert_resource` call for created resources
 
 **Checkpoint**: Foundation ready — discovery_sources table (migration), DAO for sources, resources DAO/service support for discovery_source_id and bulk URL lookup. User story implementation can begin.
 
@@ -51,12 +51,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [P] [US1] Implement sitemap scanner in `src/services/discovery/sitemap_scanner.py`: fetch sitemap URL via httpx, parse with `xml.etree.ElementTree` (urlset and sitemapindex with capped recursion), apply config filters (days_back, require_https, required_path_patterns, excluded_path_patterns, max_path_depth) per data-model.md and research.md
-- [ ] T010 [P] [US1] Implement RSS scanner in `src/services/discovery/rss_scanner.py`: fetch feed via httpx, parse with feedparser, apply config filters (days_back, min_relevance_score, require_https) per data-model.md
-- [ ] T011 [P] [US1] Implement YouTube scanner in `src/services/discovery/youtube_scanner.py`: use YouTube Data API v3 (channelId / uploads playlist or search.list), form video URLs; config from source `config` (channel_id, max_videos); require YOUTUBE_API_KEY from env/Modal secret
-- [ ] T012 [US1] Implement discovery service in `src/services/discovery/service.py`: `run_discovery(dry_run: bool = False)`: load enabled sources via discovery_sources_dao; for each source run appropriate scanner in try/except (per-source failure does not abort run; log and continue), keeping URLs grouped by source (e.g. list of (source_id, urls) or dict source_id → urls); call `get_existing_urls` once over all candidate URLs to get existing set; for each source, filter that source's URLs to net-new (not in existing set), then call `batch_create(net_new_urls, discovery_source_id=source_id)` so provenance is set; collect created resource IDs from each batch_create response (results where status == "created"); return created IDs for scrape spawn (see T013); use `get_logger(__name__)` and structured logging
-- [ ] T013 [US1] Add `run_discovery` Modal function in `src/deployment/modal_workers.py`: `@app.function` with image that includes discovery deps, timeout e.g. 600s, `schedule=modal.Period(days=1)`, secrets; invoke discovery service; for each resource ID returned as created, call `scrape_resource.spawn(resource_id)` (when not dry_run); support optional `dry_run` parameter for manual/CLI runs
-- [ ] T014 [US1] Wire discovery service to resources and scrape: ensure `src/services/discovery/service.py` calls `batch_create` from `src/services.resources_service` and that Modal `run_discovery` obtains created IDs from service return value and calls `scrape_resource.spawn` for each (in-process, no HTTP to API)
+- [X] T009 [P] [US1] Implement sitemap scanner in `src/services/discovery/sitemap_scanner.py`: fetch sitemap URL via httpx, parse with `xml.etree.ElementTree` (urlset and sitemapindex with capped recursion), apply config filters (days_back, require_https, required_path_patterns, excluded_path_patterns, max_path_depth) per data-model.md and research.md
+- [X] T010 [P] [US1] Implement RSS scanner in `src/services/discovery/rss_scanner.py`: fetch feed via httpx, parse with feedparser, apply config filters (days_back, min_relevance_score, require_https) per data-model.md
+- [X] T011 [P] [US1] Implement YouTube scanner in `src/services/discovery/youtube_scanner.py`: use YouTube Data API v3 (channelId / uploads playlist or search.list), form video URLs; config from source `config` (channel_id, max_videos); require YOUTUBE_API_KEY from env/Modal secret
+- [X] T012 [US1] Implement discovery service in `src/services/discovery/service.py`: `run_discovery(dry_run: bool = False)`: load enabled sources via discovery_sources_dao; for each source run appropriate scanner in try/except (per-source failure does not abort run; log and continue), keeping URLs grouped by source (e.g. list of (source_id, urls) or dict source_id → urls); call `get_existing_urls` once over all candidate URLs to get existing set; for each source, filter that source's URLs to net-new (not in existing set), then call `batch_create(net_new_urls, discovery_source_id=source_id)` so provenance is set; collect created resource IDs from each batch_create response (results where status == "created"); return created IDs for scrape spawn (see T013); use `get_logger(__name__)` and structured logging
+- [X] T013 [US1] Add `run_discovery` Modal function in `src/deployment/modal_workers.py`: `@app.function` with image that includes discovery deps, timeout e.g. 600s, `schedule=modal.Period(days=1)`, secrets; invoke discovery service; for each resource ID returned as created, call `scrape_resource.spawn(resource_id)` (when not dry_run); support optional `dry_run` parameter for manual/CLI runs
+- [X] T014 [US1] Wire discovery service to resources and scrape: ensure `src/services/discovery/service.py` calls `batch_create` from `src/services.resources_service` and that Modal `run_discovery` obtains created IDs from service return value and calls `scrape_resource.spawn` for each (in-process, no HTTP to API)
 
 **Checkpoint**: User Story 1 complete. Run discovery with one sitemap, one RSS, one YouTube source; confirm resources created with pipeline_stage=discovered, no duplicates on re-run, scrape spawned only for new resources.
 
@@ -70,8 +70,8 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Document adding/updating discovery sources in `docs/runbook.md`: add section for discovery_sources table, how to insert/update rows (SQL examples from quickstart.md), enable/disable, and how to verify discovery uses them
-- [ ] T016 [US2] Ensure discovery service in `src/services/discovery/service.py` skips sources with `enabled = false` (list_enabled_sources already enforces this) and applies per-source config (config.url, config.feed_url, config.channel_id, days_back, etc.) from each source row; add or reuse validation for source_type and config shape per data-model.md when loading sources
+- [X] T015 [P] [US2] Document adding/updating discovery sources in `docs/runbook.md`: add section for discovery_sources table, how to insert/update rows (SQL examples from quickstart.md), enable/disable, and how to verify discovery uses them
+- [X] T016 [US2] Ensure discovery service in `src/services/discovery/service.py` skips sources with `enabled = false` (list_enabled_sources already enforces this) and applies per-source config (config.url, config.feed_url, config.channel_id, days_back, etc.) from each source row; add or reuse validation for source_type and config shape per data-model.md when loading sources
 
 **Checkpoint**: User Story 2 complete. Add/disable sources via DB; run discovery and verify behavior per source config.
 
@@ -85,8 +85,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Add dry_run behavior in `src/services/discovery/service.py`: when `dry_run=True`, run all scanners and filters and dedupe, but do not call `batch_create` and do not return created IDs for scrape; log or return summary (counts per source, total URLs that would be submitted, optional sample URLs)
-- [ ] T018 [US3] Support dry-run invocation for Modal `run_discovery` in `src/deployment/modal_workers.py`: accept `dry_run` (e.g. CLI `modal run ... --dry-run` or function arg); pass to discovery service; ensure no `scrape_resource.spawn` calls when dry_run is True; log "DRY RUN: no resources created, no scrape spawned" and summary per contracts/discovery-run-invocation.md
+- [X] T017 [US3] Add dry_run behavior in `src/services/discovery/service.py`: when `dry_run=True`, run all scanners and filters and dedupe, but do not call `batch_create` and do not return created IDs for scrape; log or return summary (counts per source, total URLs that would be submitted, optional sample URLs)
+- [X] T018 [US3] Support dry-run invocation for Modal `run_discovery` in `src/deployment/modal_workers.py`: accept `dry_run` (e.g. CLI `modal run ... --dry-run` or function arg); pass to discovery service; ensure no `scrape_resource.spawn` calls when dry_run is True; log "DRY RUN: no resources created, no scrape spawned" and summary per contracts/discovery-run-invocation.md
 
 **Checkpoint**: User Story 3 complete. Run `modal run src.deployment.modal_workers::run_discovery --dry-run` and verify no side effects and clear reporting.
 
@@ -96,8 +96,8 @@
 
 **Purpose**: Runbook, quickstart validation, and cross-cutting clarity.
 
-- [ ] T019 [P] Add discovery section to `docs/runbook.md`: run discovery (dry-run then live), verify resources and scrape, idempotency check; reference quickstart.md and YOUTUBE_API_KEY; troubleshooting (no sources run, YouTube errors, per-source failures)
-- [ ] T020 Validate quickstart flow: apply migration, add at least one source, run discovery dry-run, run discovery for real, re-run and confirm no duplicate resources; update quickstart.md or runbook if steps diverge
+- [X] T019 [P] Add discovery section to `docs/runbook.md`: run discovery (dry-run then live), verify resources and scrape, idempotency check; reference quickstart.md and YOUTUBE_API_KEY; troubleshooting (no sources run, YouTube errors, per-source failures)
+- [X] T020 Validate quickstart flow: apply migration, add at least one source, run discovery dry-run, run discovery for real, re-run and confirm no duplicate resources; update quickstart.md or runbook if steps diverge
 
 ---
 

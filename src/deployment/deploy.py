@@ -68,6 +68,7 @@ def push_modal_secrets(env: str) -> bool:
         f"NEO4J_PASSWORD={os.environ.get('NEO4J_PASSWORD', '')}",
         f"NEO4J_DATABASE={os.environ.get('NEO4J_DATABASE', 'neo4j')}",
         f"OPENAI_API_KEY={os.environ.get('OPENAI_API_KEY', '')}",
+        f"YOUTUBE_API_KEY={os.environ.get('YOUTUBE_API_KEY', '')}",
     ]
     if scraping_proxy_url := os.environ.get("SCRAPING_PROXY_URL"):
         app_cmd.append(f"SCRAPING_PROXY_URL={scraping_proxy_url}")
