@@ -3,6 +3,10 @@ import json
 from datetime import datetime, timezone
 
 from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 from graphiti_core.nodes import EpisodeType
 
 from src.models.config import load_settings
@@ -18,16 +22,40 @@ logger = get_logger(__name__)
 
 
 def _get_graphiti_client() -> Graphiti:
-    """Build Graphiti client from env (NEO4J_*, OPENAI_API_KEY)."""
+    """Build Graphiti client from env (NEO4J_*, OPENROUTER_API_KEY and OpenRouter model vars)."""
     settings = load_settings()
     if not settings.neo4j_uri or not settings.neo4j_password:
         raise ValueError("NEO4J_URI and NEO4J_PASSWORD must be set for ingestion")
-    if not settings.openai_api_key:
-        raise ValueError("OPENAI_API_KEY must be set for Graphiti")
+    if not settings.openrouter_api_key:
+        raise ValueError("OPENROUTER_API_KEY must be set for Graphiti")
+    llm_config = LLMConfig(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+        model=settings.openrouter_model,
+        small_model=settings.openrouter_small_model,
+    )
+    llm_client = OpenAIGenericClient(config=llm_config)
+    embedder = OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url,
+            embedding_model=settings.openrouter_embedding_model,
+        )
+    )
+    cross_encoder = OpenAIRerankerClient(
+        config=LLMConfig(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url,
+            model=settings.openrouter_small_model,
+        )
+    )
     return Graphiti(
         settings.neo4j_uri,
         settings.neo4j_username or "neo4j",
         settings.neo4j_password,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
     )
 
 

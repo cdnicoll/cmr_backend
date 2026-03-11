@@ -50,7 +50,24 @@ class Settings(BaseSettings):
     neo4j_username: str = Field(default="", validation_alias="NEO4J_USERNAME")
     neo4j_password: str = Field(default="", validation_alias="NEO4J_PASSWORD")
     neo4j_database: str = Field(default="neo4j", validation_alias="NEO4J_DATABASE")
-    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    # OpenRouter (Graphiti ingestion — LLM, embedder, reranker)
+    openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias="OPENROUTER_BASE_URL",
+    )
+    openrouter_model: str = Field(
+        default="openai/gpt-4o-mini",
+        validation_alias="OPENROUTER_MODEL",
+    )
+    openrouter_small_model: str = Field(
+        default="openai/gpt-4o-mini",
+        validation_alias="OPENROUTER_SMALL_MODEL",
+    )
+    openrouter_embedding_model: str = Field(
+        default="openai/text-embedding-3-small",
+        validation_alias="OPENROUTER_EMBEDDING_MODEL",
+    )
     # Discovery defaults (per research.md and plan)
     discovery_days_back_default: int = Field(
         default=14,

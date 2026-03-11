@@ -67,7 +67,11 @@ def push_modal_secrets(env: str) -> bool:
         f"NEO4J_USERNAME={os.environ.get('NEO4J_USERNAME', '')}",
         f"NEO4J_PASSWORD={os.environ.get('NEO4J_PASSWORD', '')}",
         f"NEO4J_DATABASE={os.environ.get('NEO4J_DATABASE', 'neo4j')}",
-        f"OPENAI_API_KEY={os.environ.get('OPENAI_API_KEY', '')}",
+        f"OPENROUTER_API_KEY={os.environ.get('OPENROUTER_API_KEY', '')}",
+        f"OPENROUTER_BASE_URL={os.environ.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')}",
+        f"OPENROUTER_MODEL={os.environ.get('OPENROUTER_MODEL', 'openai/gpt-4o-mini')}",
+        f"OPENROUTER_SMALL_MODEL={os.environ.get('OPENROUTER_SMALL_MODEL', 'openai/gpt-4o-mini')}",
+        f"OPENROUTER_EMBEDDING_MODEL={os.environ.get('OPENROUTER_EMBEDDING_MODEL', 'openai/text-embedding-3-small')}",
         f"YOUTUBE_API_KEY={os.environ.get('YOUTUBE_API_KEY', '')}",
     ]
     if scraping_proxy_url := os.environ.get("SCRAPING_PROXY_URL"):

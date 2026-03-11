@@ -18,7 +18,8 @@ async def get_resource_by_id(resource_id: str) -> dict | None:
             row = await conn.fetchrow(
                 """
                 SELECT id, url, title, type, pipeline_stage, failure_reason,
-                    scraped_content, discovery_source_id, created_at, updated_at
+                    scraped_content, discovery_source_id, created_at, updated_at,
+                    scraped_at, ingested_at
                 FROM public.resources WHERE id = $1
                 """,
                 resource_id,
@@ -90,7 +91,8 @@ async def update_resource_after_ingestion(
             await conn.execute(
                 """
                 UPDATE public.resources
-                SET pipeline_stage = $1, failure_reason = $2
+                SET pipeline_stage = $1, failure_reason = $2,
+                    ingested_at = CASE WHEN $1 = 'complete' THEN NOW() ELSE ingested_at END
                 WHERE id = $3
                 """,
                 pipeline_stage,
@@ -117,7 +119,8 @@ async def update_resource_after_scrape(
             await conn.execute(
                 """
                 UPDATE public.resources
-                SET pipeline_stage = $1, scraped_content = $2, failure_reason = $3
+                SET pipeline_stage = $1, scraped_content = $2, failure_reason = $3,
+                    scraped_at = CASE WHEN $1 = 'scraped' THEN NOW() ELSE scraped_at END
                 WHERE id = $4
                 """,
                 pipeline_stage,
@@ -146,7 +149,8 @@ async def insert_resource(
                     INSERT INTO public.resources (url, type, pipeline_stage, discovery_source_id)
                     VALUES ($1, $2, $3, $4)
                     RETURNING id, url, title, type, pipeline_stage, failure_reason,
-                        scraped_content, discovery_source_id, created_at, updated_at
+                        scraped_content, discovery_source_id, created_at, updated_at,
+                        scraped_at, ingested_at
                     """,
                     url,
                     resource_type,

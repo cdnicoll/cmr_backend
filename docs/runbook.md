@@ -115,7 +115,7 @@ Resource must have `pipeline_stage = discovered` and `type = youtube`.
 
 ### Ingest to Graphiti
 
-Resource must have `pipeline_stage = scraped` and `scraped_content` with `word_count >= INGEST_MIN_WORD_COUNT` (default 100). Neo4j and OpenAI (or equivalent) must be set in Modal secrets (`app-config-{env}`) and in `.env` for local runs.
+Resource must have `pipeline_stage = scraped` and `scraped_content` with `word_count >= INGEST_MIN_WORD_COUNT` (default 100). Neo4j and OpenRouter must be set in Modal secrets (`app-config-{env}`) and in `.env` for local runs.
 
 ```bash
 modal run src.deployment.modal_workers::ingest_resource --resource-id "<uuid>"
@@ -129,7 +129,7 @@ modal run src.deployment.modal_workers::ingest_resource --resource-id "<uuid>"
 - `pipeline_stage = failed`, other `failure_reason` — Graphiti/Neo4j/LLM error; check Modal logs.
 - Resource stuck in `ingesting` — Modal timeout; recovery in Phase 8.
 
-**Env vars** (see `.env.example`): `INGEST_MIN_WORD_COUNT`, `INGEST_STUCK_TIMEOUT_MINUTES`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `OPENAI_API_KEY`.
+**Env vars** (see `.env.example`): `INGEST_MIN_WORD_COUNT`, `INGEST_STUCK_TIMEOUT_MINUTES`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, `OPENROUTER_SMALL_MODEL`, `OPENROUTER_EMBEDDING_MODEL`.
 
 ---
 
