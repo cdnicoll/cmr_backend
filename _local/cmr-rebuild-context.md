@@ -49,10 +49,10 @@ Each phase in the build plan maps to one speckit spec, written just-in-time (not
 | 2b | Scraping — YouTube (youtube-transcript-api) | Small | Complete |
 | 3 | Insights — AI Extraction | — | **Superseded** (Graphiti is single extractor; Phase 3 extraction code removed in Phase 4) |
 | 4 | Knowledge Graph — Graphiti Ingestion (from scraped content) | Medium | Complete |
-| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Next |
+| 5 | Content Discovery — Sitemap, RSS, and YouTube | Medium | Complete |
 | 6 | Trends — Multi-Agent Analysis | — | **Eliminated** |
 | 7 | Content Generation | — | **Eliminated** |
-| 8 | Pipeline Orchestration and Recovery | Medium | Pending |
+| 8 | Pipeline Orchestration and Recovery | Medium | Next |
 | 9 | Tasks and Job Monitoring | — | **Eliminated** |
 
 Pipeline flows: Discovery (5) → Scraping (2) → **Ingest via Graphiti (4)**. There is no separate "insights" step; Graphiti ingests scraped content and performs extraction, entity merge, and graph write. Orchestration (8) ties discovery → scrape → ingest. The backend's responsibility ends at Phase 4. Trend analysis and content generation are handled outside the backend by an LLM client connected directly to the Neo4j MCP server.
@@ -320,7 +320,7 @@ Write the plan as if it will be handed to a developer who will use it to write o
 
 ## Current Status
 
-**Phases 1, 2, 2b, and 4 are complete.** Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 implemented ingestion from scraped content and removed the Phase 3 extraction code. **Next: Phase 5 (Content Discovery).**
+**Phases 1, 2, 2b, 4, and 5 are complete.** Phase 3 (Insights) was superseded; Graphiti is the single extractor and Phase 4 implemented ingestion from scraped content and removed the Phase 3 extraction code. Phase 5 (Content Discovery) is complete: discovery_sources table, sitemap/RSS/YouTube scanners, scheduled `run_discovery` (e.g. daily), dry-run, per-source failure isolation, provenance via `discovery_source_id`, and scrape spawned only for net-new resources. **Next: Phase 8 (Pipeline Orchestration and Recovery).**
 
 | Phase | Status |
 |-------|--------|
@@ -329,13 +329,14 @@ Write the plan as if it will be handed to a developer who will use it to write o
 | 2b — Scraping (YouTube) | Complete |
 | 3 — Insights (AI Extraction) | Superseded (removed in Phase 4) |
 | 4 — Knowledge Graph (Graphiti from scraped content) | Complete |
-| 5 — Content Discovery | Next |
-| 8 — Orchestration & Recovery | Pending |
+| 5 — Content Discovery | Complete |
+| 8 — Orchestration & Recovery | Next |
 
 Key outcomes to date:
 - Phases 6 (Trends), 7 (Content Generation), and 9 (Tasks) were **eliminated** — these concerns move outside the backend to an LLM client with Neo4j MCP access
 - **Graphiti as single extractor (Option B2):** Ingestion reads scraped content and sends it to Graphiti; Graphiti does LLM extraction and writes to Neo4j. Phase 4 implemented the ingestion worker and removed the Phase 3 extraction code (agent, service, Modal function, DAO methods, insight column).
-- The backend's responsibility ends at Phase 4: getting scraped content into the knowledge graph via Graphiti
+- **Phase 5 (Content Discovery):** `discovery_sources` table and migration; sitemap, RSS, and YouTube channel scanners; discovery service with per-source URLs, dedupe via `get_existing_urls`, per-source `batch_create` with `discovery_source_id`; Modal `run_discovery` with `schedule=modal.Period(days=1)`, dry-run support, and scrape spawn for created resources only. Runbook documents migration, adding sources, and running discovery (dry-run then live).
+- The backend pipeline is discovery → scrape → ingest (Graphiti). Orchestration (Phase 8) will tie these together and add recovery.
 - Residential proxy (Smartproxy) added for both Crawl4AI and YouTube scraping to bypass cloud IP blocks
 - `deploy.py` automatically pushes all secrets from `.env` to Modal on deploy — new env vars must be added to both `.env` and `push_modal_secrets()` in `deploy.py`
 
@@ -352,6 +353,4 @@ The build plan is locked. For each active phase, the rhythm is:
 2. **Build task by task** in Cursor Agent mode using the spec as a checklist
 3. **Update `/_local/build-plan.md`** if scope or sequencing changes during the build
 
-Active phases in order: **5 → 8**
-
-Start with **Phase 5: Content Discovery — Sitemap, RSS, and YouTube**. Use the Phase 5 prompt in `_local/spec_planning.md`.
+Remaining active phase: **Phase 8 (Pipeline Orchestration and Recovery)**. Use the Phase 8 section in `_local/build-plan.md` and the relevant domain docs (e.g. `09-scheduled-pipeline.md`) when generating the spec.
