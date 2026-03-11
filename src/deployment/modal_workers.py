@@ -134,7 +134,7 @@ async def run_discovery(dry_run: bool = False) -> None:
 @app.function(
     image=image,
     timeout=300,
-    schedule=modal.Period(minutes=15),
+    schedule=modal.Period(hours=2),
     secrets=_secrets,
 )
 async def run_recovery_pipeline() -> None:
