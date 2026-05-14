@@ -4,6 +4,47 @@ import subprocess
 import sys
 
 
+def validate_modal_workspace(expected_workspace: str) -> bool:
+    """Confirm the active Modal profile is authenticated to the expected workspace."""
+    try:
+        result = subprocess.run(
+            ["modal", "profile", "list"],
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Could not run 'modal profile list': {e.stderr or e}", file=sys.stderr)
+        return False
+
+    active_workspace = None
+    for line in result.stdout.splitlines():
+        if "•" in line:
+            # Table row format: │ • │ <profile> │ <workspace> │
+            cols = [c.strip() for c in line.split("│") if c.strip()]
+            # cols: ['•', '<profile>', '<workspace>']
+            if len(cols) >= 3:
+                active_workspace = cols[2]
+            break
+
+    if active_workspace != expected_workspace:
+        print(
+            f"❌ Wrong Modal workspace. Expected '{expected_workspace}', "
+            f"but active profile is '{active_workspace or 'unknown'}'.",
+            file=sys.stderr,
+        )
+        print(
+            "   Switch profiles with: modal profile activate <profile-name>",
+            file=sys.stderr,
+        )
+        print(
+            "   Or create a new profile with: modal setup",
+            file=sys.stderr,
+        )
+        return False
+
+    print(f"✅ Modal workspace: {active_workspace}")
+    return True
+
+
 def push_modal_secrets(env: str) -> bool:
     """
     Push secrets from .env to Modal for the specified environment.
@@ -87,20 +128,48 @@ def push_modal_secrets(env: str) -> bool:
     return True
 
 
+def push_finance_mcp_secret(project_args: list[str]) -> bool:
+    """Push FINANCE_MCP_TOKEN to Modal as finance-mcp-credentials secret."""
+    token = os.environ.get("FINANCE_MCP_TOKEN", "")
+    if not token:
+        print("❌ Missing required env var: FINANCE_MCP_TOKEN", file=sys.stderr)
+        print("   Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"", file=sys.stderr)
+        return False
+
+    secret_name = "finance-mcp-credentials"
+    cmd = ["modal", "secret", "create", *project_args, "--force", secret_name, f"FINANCE_MCP_TOKEN={token}"]
+    print(f"🔐 Pushing {secret_name} to Modal...")
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        print(f"   ✅ {secret_name}")
+    except subprocess.CalledProcessError as e:
+        print(f"   ❌ Failed: {e.stderr or e}", file=sys.stderr)
+        return False
+
+    return True
+
+
 def main() -> None:
     """Deploy to Modal. Usage: deploy_dev or deploy_prod."""
     from dotenv import load_dotenv
 
     load_dotenv()
 
+    expected_workspace = os.environ.get("MODAL_WORKSPACE", "canadian-mining-report")
+    if not validate_modal_workspace(expected_workspace):
+        sys.exit(1)
+
     env = "production" if "prod" in (sys.argv[0] or "") else "develop"
     modal_project = os.environ.get("MODAL_PROJECT")
+    project_args = ["-e", modal_project] if modal_project else []
     deploy_args = ["modal", "deploy"]
     if modal_project:
         deploy_args.extend(["-e", modal_project])
 
     # Push secrets from .env to Modal before deploy
     if not push_modal_secrets(env):
+        sys.exit(1)
+    if not push_finance_mcp_secret(project_args):
         sys.exit(1)
 
     # Ensure ENVIRONMENT is set so modal_workers uses correct app name and secrets
@@ -110,6 +179,7 @@ def main() -> None:
     if env in ("develop", "production"):
         subprocess.run([*deploy_args, "src/deployment/modal_app.py"], check=True, env=deploy_env)
         subprocess.run([*deploy_args, "src/deployment/modal_workers.py"], check=True, env=deploy_env)
+        subprocess.run([*deploy_args, "src/deployment/modal_mcp_finance.py"], check=True, env=deploy_env)
     else:
         print(f"Unknown environment: {env}")
         sys.exit(1)

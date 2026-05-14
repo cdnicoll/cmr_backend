@@ -20,3 +20,4 @@ dist/
 *.swp
 *.swo
 .DS_Store
+.mcp.json
