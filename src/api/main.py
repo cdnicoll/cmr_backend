@@ -30,9 +30,11 @@ app.add_middleware(RequestIDMiddleware)
 
 from src.api.routes import health
 from src.api.routes.resources import router as resources_router
+from src.api.routes.tsxv50 import router as tsxv50_router
 
 app.include_router(health.router)
 app.include_router(resources_router, prefix="/api/v1")
+app.include_router(tsxv50_router, prefix="/api/v1")
 
 
 @app.exception_handler(Exception)

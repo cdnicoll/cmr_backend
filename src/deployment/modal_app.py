@@ -26,6 +26,10 @@ image = (
     image=image,
     timeout=300,
     allow_concurrent_inputs=100,
+    secrets=[
+        modal.Secret.from_name("supabase-credentials-develop"),
+        modal.Secret.from_name("app-config-develop"),
+    ],
 )
 @modal.asgi_app()
 def asgi_app():

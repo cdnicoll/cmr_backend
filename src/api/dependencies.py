@@ -12,6 +12,15 @@ from src.models.responses import ValidatedJWTUser
 security = HTTPBearer(auto_error=False)
 
 
+async def get_tsxv50_token(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+) -> None:
+    """Validate static Bearer token for machine-to-machine TSXV50 endpoints."""
+    settings = load_settings()
+    if not credentials or credentials.credentials != settings.tsxv50_api_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def get_settings() -> Settings:
     """Get cached settings."""
     return load_settings()

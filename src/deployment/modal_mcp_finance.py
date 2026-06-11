@@ -5,8 +5,7 @@ app = modal.App("CMR-Finance-MCP")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("fastmcp", "yfinance")
-    .add_local_file("top50config.json", "/app/top50config.json")
+    .pip_install("fastmcp", "yfinance", "asyncpg")
 )
 
 
@@ -17,10 +16,11 @@ image = (
 )
 @modal.asgi_app()
 def serve():
+    import asyncio
     import concurrent.futures
-    import json
     import os
 
+    import asyncpg
     import yfinance as yf
     from fastmcp import FastMCP
     from fastmcp.server.http import create_streamable_http_app
@@ -28,8 +28,17 @@ def serve():
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
-    with open("/app/top50config.json") as f:
-        TSXV50: list[str] = json.load(f)
+    async def _load_tsxv50() -> list[str]:
+        conn = await asyncpg.connect(os.environ["TRANSACTION_POOLER_URL"])
+        row = await conn.fetchrow(
+            "SELECT symbols FROM public.tsxv50_snapshots ORDER BY created_at DESC LIMIT 1"
+        )
+        await conn.close()
+        if not row:
+            raise RuntimeError("tsxv50_snapshots table is empty")
+        return row["symbols"]
+
+    TSXV50: list[str] = asyncio.run(_load_tsxv50())
 
     class BearerAuthMiddleware(BaseHTTPMiddleware):
         def __init__(self, app, token: str):

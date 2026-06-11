@@ -90,6 +90,7 @@ class Settings(BaseSettings):
         default=10,
         validation_alias="DISCOVERY_INITIAL_MAX_VIDEOS",
     )
+    tsxv50_api_token: str = Field(..., validation_alias="TSXV50_API_TOKEN")
 
 
 @lru_cache

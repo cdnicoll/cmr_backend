@@ -57,6 +57,7 @@ def push_modal_secrets(env: str) -> bool:
         "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_SECRET_KEY",
         "TRANSACTION_POOLER_URL",
+        "TSXV50_API_TOKEN",
     ]
     missing = [k for k in required if not os.environ.get(k)]
     if missing:
@@ -114,6 +115,7 @@ def push_modal_secrets(env: str) -> bool:
         f"OPENROUTER_SMALL_MODEL={os.environ.get('OPENROUTER_SMALL_MODEL', 'openai/gpt-4o-mini')}",
         f"OPENROUTER_EMBEDDING_MODEL={os.environ.get('OPENROUTER_EMBEDDING_MODEL', 'openai/text-embedding-3-small')}",
         f"YOUTUBE_API_KEY={os.environ.get('YOUTUBE_API_KEY', '')}",
+        f"TSXV50_API_TOKEN={os.environ['TSXV50_API_TOKEN']}",
     ]
     if scraping_proxy_url := os.environ.get("SCRAPING_PROXY_URL"):
         app_cmd.append(f"SCRAPING_PROXY_URL={scraping_proxy_url}")
@@ -129,15 +131,19 @@ def push_modal_secrets(env: str) -> bool:
 
 
 def push_finance_mcp_secret(project_args: list[str]) -> bool:
-    """Push FINANCE_MCP_TOKEN to Modal as finance-mcp-credentials secret."""
+    """Push FINANCE_MCP_TOKEN and TRANSACTION_POOLER_URL to Modal as finance-mcp-credentials secret."""
     token = os.environ.get("FINANCE_MCP_TOKEN", "")
     if not token:
         print("❌ Missing required env var: FINANCE_MCP_TOKEN", file=sys.stderr)
         print("   Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"", file=sys.stderr)
         return False
+    pooler_url = os.environ.get("TRANSACTION_POOLER_URL", "")
+    if not pooler_url:
+        print("❌ Missing required env var: TRANSACTION_POOLER_URL", file=sys.stderr)
+        return False
 
     secret_name = "finance-mcp-credentials"
-    cmd = ["modal", "secret", "create", *project_args, "--force", secret_name, f"FINANCE_MCP_TOKEN={token}"]
+    cmd = ["modal", "secret", "create", *project_args, "--force", secret_name, f"FINANCE_MCP_TOKEN={token}", f"TRANSACTION_POOLER_URL={pooler_url}"]
     print(f"🔐 Pushing {secret_name} to Modal...")
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
