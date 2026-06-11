@@ -18,6 +18,7 @@ image = (
 def serve():
     import asyncio
     import concurrent.futures
+    import json
     import os
 
     import asyncpg
@@ -28,17 +29,24 @@ def serve():
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
-    async def _load_tsxv50() -> list[str]:
+    def _decode_jsonb(value):
+        return json.loads(value) if isinstance(value, str) else value
+
+    async def _load_tsxv50() -> tuple[list[str], list[dict]]:
         conn = await asyncpg.connect(os.environ["TRANSACTION_POOLER_URL"])
         row = await conn.fetchrow(
-            "SELECT symbols FROM public.tsxv50_snapshots ORDER BY created_at DESC LIMIT 1"
+            "SELECT symbols, entries FROM public.tsxv50_snapshots ORDER BY created_at DESC LIMIT 1"
         )
         await conn.close()
         if not row:
             raise RuntimeError("tsxv50_snapshots table is empty")
-        return row["symbols"]
+        symbols = _decode_jsonb(row["symbols"])
+        entries = _decode_jsonb(row["entries"])
+        if entries is not None:
+            return [entry["symbol"] for entry in entries], entries
+        return symbols, []
 
-    TSXV50: list[str] = asyncio.run(_load_tsxv50())
+    TSXV50, TSXV50_ENTRIES = asyncio.run(_load_tsxv50())
 
     class BearerAuthMiddleware(BaseHTTPMiddleware):
         def __init__(self, app, token: str):
@@ -57,6 +65,13 @@ def serve():
     def get_tsxv50_watchlist() -> list[str]:
         """Returns the 2026 TSX Venture 50 watchlist symbols (TSXV tickers with .V suffix for Yahoo Finance)."""
         return TSXV50
+
+    @mcp.tool()
+    def get_tsxv50_by_category(category: str) -> list[dict]:
+        """Return TSXV50 watchlist entries (symbol, name, category) matching the given category.
+        Valid categories: Gold, Copper & Base Metals, Royalty & Streaming, Silver, Lithium, Uranium, Unclassified.
+        Returns an empty list if the loaded snapshot predates categorization (legacy snapshot)."""
+        return [entry for entry in TSXV50_ENTRIES if entry.get("category") == category]
 
     @mcp.tool()
     def get_stock_info(symbols: list[str]) -> list[dict]:

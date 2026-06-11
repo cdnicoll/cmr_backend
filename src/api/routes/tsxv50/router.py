@@ -4,23 +4,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator
 
 from src.api.dependencies import get_tsxv50_token
-from src.services.supabase.tsxv50_dao import get_latest_snapshot, insert_snapshot
+from src.api.schemas.tsxv50 import SnapshotRequest
+from src.services.supabase.tsxv50_dao import get_latest_snapshot, insert_snapshot_entries
 
 router = APIRouter(prefix="/tsxv50", tags=["tsxv50"])
-
-
-class SnapshotRequest(BaseModel):
-    symbols: list[str]
-
-    @field_validator("symbols")
-    @classmethod
-    def symbols_non_empty(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("symbols must not be empty")
-        return v
 
 
 def _serialize(row: dict) -> dict:
@@ -40,5 +29,6 @@ async def get_snapshot(_: None = Depends(get_tsxv50_token)) -> JSONResponse:
 
 @router.post("/snapshot", status_code=201)
 async def post_snapshot(body: SnapshotRequest, _: None = Depends(get_tsxv50_token)) -> JSONResponse:
-    row = await insert_snapshot(body.symbols)
+    entries = [entry.model_dump() for entry in body.entries]
+    row = await insert_snapshot_entries(entries)
     return JSONResponse(content=_serialize(row), status_code=status.HTTP_201_CREATED)
