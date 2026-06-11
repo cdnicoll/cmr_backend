@@ -1,0 +1,328 @@
+/* TSXV50 report stylesheet. Brand tokens sampled from the April 2023 reference;
+   confirm against brand assets before locking (build-spec §4). */
+
+@page {
+  size: Letter;
+  margin: 18mm 15mm 20mm;
+
+  @bottom-center {
+    content: "{{ footer_text }}  ·  Page " counter(page);
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #6B6B6B;
+  }
+}
+
+@page cover {
+  margin: 0;
+  @bottom-center { content: none; }
+}
+
+:root {
+  --brand-red: #CF1F2E;
+  --header-maroon: #B02427;
+  --row-gray: #F2F2F2;
+  --ink: #1A1A1A;
+  --muted: #6B6B6B;
+  --gold: #E8B83A;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.45;
+  color: var(--ink);
+  margin: 0;
+}
+
+p { margin: 0 0 7pt; }
+
+/* ---------- Cover ---------- */
+
+.cover {
+  page: cover;
+  page-break-after: always;
+  height: 279mm; /* Letter height */
+  position: relative;
+  background: #2B2F33;
+}
+
+.cover-hero {
+  height: 200mm;
+  background: linear-gradient(180deg, #3C434A 0%, #23272B 70%, #15171A 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.cover-top {
+  position: absolute;
+  top: 12mm;
+  left: 14mm;
+  right: 14mm;
+  display: block;
+}
+
+.cover-logo {
+  float: left;
+  color: #FFFFFF;
+  font-size: 13pt;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+}
+
+.cover-logo .logo-mark {
+  display: inline-block;
+  width: 11pt;
+  height: 11pt;
+  background: var(--brand-red);
+  margin-right: 5pt;
+  vertical-align: -1pt;
+}
+
+.cover-period {
+  float: right;
+  color: #FFFFFF;
+  font-size: 11pt;
+  font-weight: bold;
+}
+
+.cover-title-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 79mm;
+  background: var(--brand-red);
+  color: #FFFFFF;
+  padding: 14mm 14mm 0;
+  text-align: center;
+}
+
+.cover-publication {
+  font-size: 11pt;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  margin-bottom: 5mm;
+}
+
+.cover-report-title {
+  font-size: 21pt;
+  font-weight: bold;
+  margin-bottom: 6mm;
+}
+
+.cover-tagline {
+  font-size: 38pt;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6mm;
+}
+
+.cover-sub {
+  font-size: 10.5pt;
+  color: #F6D9DB;
+}
+
+/* ---------- Shared ---------- */
+
+.subhead {
+  color: var(--brand-red);
+  font-size: 11pt;
+  font-weight: bold;
+  margin: 10pt 0 4pt;
+}
+
+.section-banner {
+  background: var(--brand-red);
+  color: #FFFFFF;
+  padding: 7pt 10pt;
+  margin: 0 0 10pt;
+  page-break-after: avoid;
+}
+
+.section-banner .banner-title {
+  font-size: 13pt;
+  font-weight: bold;
+}
+
+.section-banner .banner-sub {
+  font-size: 9pt;
+  color: #F6D9DB;
+  margin-top: 1pt;
+}
+
+.figure-label {
+  color: var(--brand-red);
+  font-size: 10pt;
+  font-weight: bold;
+  margin: 10pt 0 4pt;
+  page-break-after: avoid;
+}
+
+.figure {
+  page-break-inside: avoid;
+  margin-bottom: 8pt;
+}
+
+.figure svg { width: 100%; height: auto; }
+
+.page-section { page-break-before: always; }
+
+/* ---------- Master list ---------- */
+
+.master-cols { width: 100%; }
+
+.master-col {
+  float: left;
+  width: 48%;
+}
+
+.master-col + .master-col { margin-left: 3%; }
+
+.master-cols::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+.sector-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 9pt;
+  page-break-inside: avoid;
+  font-size: 8.5pt;
+}
+
+.sector-table th.sector-name {
+  background: var(--header-maroon);
+  color: #FFFFFF;
+  text-align: left;
+  font-size: 9.5pt;
+  padding: 3.5pt 6pt;
+}
+
+.sector-table th.mktcap-label {
+  background: var(--header-maroon);
+  color: #F2D7D8;
+  text-align: right;
+  font-weight: normal;
+  font-size: 7pt;
+  padding: 3.5pt 6pt;
+  width: 22%;
+}
+
+.sector-table td {
+  padding: 2.5pt 6pt;
+  border-bottom: 0.5pt solid #E0E0E0;
+}
+
+.sector-table tr:nth-child(even) td { background: var(--row-gray); }
+
+.sector-table td.rank {
+  width: 8%;
+  color: var(--muted);
+}
+
+.sector-table td.ticker {
+  width: 18%;
+  color: var(--muted);
+}
+
+.sector-table td.num {
+  text-align: right;
+  width: 22%;
+}
+
+/* ---------- Category sections ---------- */
+
+.cat-band {
+  background: var(--brand-red);
+  color: #FFFFFF;
+  text-align: center;
+  padding: 12pt 10pt 10pt;
+  margin-bottom: 10pt;
+  page-break-after: avoid;
+}
+
+.cat-name {
+  font-size: 26pt;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cat-tagline {
+  font-size: 10.5pt;
+  margin-top: 3pt;
+  color: #F6D9DB;
+}
+
+/* ---------- Company blocks ---------- */
+
+.company {
+  page-break-inside: avoid;
+  margin-bottom: 13pt;
+}
+
+.company-bar {
+  background: var(--brand-red);
+  color: #FFFFFF;
+  font-size: 11pt;
+  font-weight: bold;
+  padding: 4.5pt 8pt;
+  margin-bottom: 0;
+}
+
+.company-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  margin-bottom: 6pt;
+}
+
+.company-table th {
+  background: #E4E4E4;
+  color: var(--muted);
+  font-weight: bold;
+  text-align: center;
+  padding: 3pt 4pt;
+  border: 0.5pt solid #FFFFFF;
+  line-height: 1.2;
+}
+
+.company-table th.nowrap { white-space: nowrap; }
+
+.company-table td {
+  background: var(--row-gray);
+  text-align: center;
+  padding: 3.5pt 4pt;
+  border: 0.5pt solid #FFFFFF;
+  font-size: 8.5pt;
+}
+
+.company-subhead {
+  color: var(--brand-red);
+  font-size: 10.5pt;
+  font-weight: bold;
+  margin: 4pt 0 4pt;
+}
+
+.blurb { margin: 0 0 5pt; }
+
+.blurb b { color: var(--ink); }
+
+/* ---------- Glossary & disclaimer ---------- */
+
+.glossary-entry { margin: 0 0 5pt; }
+
+.glossary-entry b { color: var(--brand-red); }
+
+.disclaimer {
+  margin-top: 12pt;
+  font-size: 8pt;
+  color: var(--muted);
+}

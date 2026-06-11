@@ -45,10 +45,24 @@ period:  str  — one of: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max  (default:
 ```
 
 ### `screen_tsxv50()`
-Convenience tool — fetches all 51 TSXV 50 symbols in parallel (10 threads) and returns key fundamentals for each. Equivalent to calling `get_stock_info` on the full watch list in one shot.
+Convenience tool — fetches all 51 TSXV 50 symbols in parallel (10 threads) and returns key fundamentals for each. Equivalent to calling `get_stock_info` on the full watch list in one shot, plus 3-month and 12-month percent price changes computed from adjusted closes (the baseline is the closest trading day at or before the target date; `null` when history doesn't cover the window, e.g. new listings or delisted symbols).
 
 ```
-→ list[dict]  fields: symbol, name, currency, current_price, market_cap, sector, industry, pe_ratio, fifty_two_week_high, fifty_two_week_low
+→ list[dict]  fields: symbol, name, currency, current_price, market_cap, sector, industry, pe_ratio, fifty_two_week_high, fifty_two_week_low, chg_3mo_pct, chg_12mo_pct
+```
+
+### `generate_tsxv50_pdf(report_json)`
+Renders the quarterly TSXV50 report PDF. Thin pass-through to the `CMR-PDF` Modal app
+(WeasyPrint + matplotlib, deployed from `src/deployment/modal_pdf.py`); the heavy render runs
+there, and the finished PDF is uploaded to the `tsxv50-reports` Supabase Storage bucket.
+The payload must follow the report_json schema contract
+(`_local/pdf-generation/2026-06-11-tsxv50-report-json-schema.md`); invalid payloads return a
+structured error instead of a half-rendered report.
+
+```
+report_json: dict — full report contract: meta, introduction, master_list, categories, glossary, disclaimer
+→ dict  {pdf_url, filename, bytes, page_count}
+        or {"error": {"type": "validation_error", "issues": [{path, message}]}}
 ```
 
 ## Setup

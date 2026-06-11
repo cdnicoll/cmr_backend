@@ -1,7 +1,39 @@
 """Modal MCP server for TSXV Venture 50 finance data."""
+import calendar
+from datetime import date
+
 import modal
 
 app = modal.App("CMR-Finance-MCP")
+
+
+def _months_ago(day: date, months: int) -> date:
+    """Calendar-month subtraction, clamping to the last day of the target month."""
+    year, month = day.year, day.month - months
+    while month <= 0:
+        month += 12
+        year -= 1
+    last_day = calendar.monthrange(year, month)[1]
+    return day.replace(year=year, month=month, day=min(day.day, last_day))
+
+
+def _pct_change_from_baseline(closes: list[tuple[date, float]], target: date) -> float | None:
+    """Percent change from the closest close at or before `target` to the latest close.
+
+    `closes` is (date, adjusted_close) sorted ascending. Returns None — never a guess —
+    when history is empty or doesn't reach back to the target date (e.g. new listings).
+    """
+    if not closes:
+        return None
+    latest = closes[-1][1]
+    baseline = None
+    for day, value in reversed(closes):
+        if day <= target:
+            baseline = value
+            break
+    if baseline is None or baseline == 0:
+        return None
+    return round((latest - baseline) / baseline * 100, 1)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -133,12 +165,16 @@ def serve():
 
     @mcp.tool()
     def screen_tsxv50() -> list[dict]:
-        """Screen all TSX Venture 50 symbols in parallel and return key fundamentals (price, market cap, sector, P/E).
+        """Screen all TSX Venture 50 symbols in parallel and return key fundamentals
+        (price, market cap, sector, P/E) plus chg_3mo_pct and chg_12mo_pct — percent price
+        change over ~3 and ~12 calendar months, computed from adjusted closes and rounded
+        to 1 decimal (null when history doesn't cover the window, e.g. new listings).
         Uses 10 concurrent threads to fetch all 51 symbols efficiently."""
         def fetch_summary(symbol: str) -> dict:
             try:
-                info = yf.Ticker(symbol).info
-                return {
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                summary = {
                     "symbol": symbol,
                     "name": info.get("longName"),
                     "currency": info.get("currency"),
@@ -149,12 +185,44 @@ def serve():
                     "pe_ratio": info.get("trailingPE"),
                     "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
                     "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                    "chg_3mo_pct": None,
+                    "chg_12mo_pct": None,
                 }
+                try:
+                    # 2y so a trading day exists at or before the 12-month baseline
+                    # ("1y" starts exactly at the target date). auto_adjust makes Close
+                    # the adjusted close, so both endpoints are split/dividend-adjusted.
+                    hist = ticker.history(period="2y", auto_adjust=True)
+                    closes = [
+                        (ts.date(), float(v)) for ts, v in hist["Close"].dropna().items()
+                    ]
+                    today = date.today()
+                    summary["chg_3mo_pct"] = _pct_change_from_baseline(
+                        closes, _months_ago(today, 3)
+                    )
+                    summary["chg_12mo_pct"] = _pct_change_from_baseline(
+                        closes, _months_ago(today, 12)
+                    )
+                except Exception:
+                    pass  # history failure leaves the change fields null
+                return summary
             except Exception as e:
                 return {"symbol": symbol, "error": str(e)}
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             return list(executor.map(fetch_summary, TSXV50))
+
+    @mcp.tool()
+    def generate_tsxv50_pdf(report_json: dict) -> dict:
+        """Render the quarterly TSXV50 report PDF from a complete report_json payload.
+        Pure renderer (no data fetching): the payload must follow the report_json schema
+        contract — meta, introduction, master_list, categories (with company tables, blurbs,
+        and chart series), glossary, disclaimer.
+        Returns {pdf_url, filename, bytes, page_count} on success, or
+        {"error": {"type": "validation_error", "issues": [{path, message}]}} when the
+        payload fails the schema."""
+        pdf_fn = modal.Function.from_name("CMR-PDF", "generate_pdf")
+        return pdf_fn.remote(report_json)
 
     token = os.environ["FINANCE_MCP_TOKEN"]
     return create_streamable_http_app(

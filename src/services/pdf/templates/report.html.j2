@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ report.meta.report_title }} — {{ report.meta.period_label }}</title>
+<style>
+{% include "report.css" %}
+</style>
+</head>
+<body>
+
+{# ---------- Cover ---------- #}
+<section class="cover">
+  <div class="cover-hero"{% if report.meta.cover_image %} style="background-image: url('{{ report.meta.cover_image }}');"{% endif %}></div>
+  <div class="cover-top">
+    <div class="cover-logo"><span class="logo-mark"></span>{{ report.meta.publication }}</div>
+    <div class="cover-period">{{ report.meta.period_label }}</div>
+  </div>
+  <div class="cover-title-block">
+    <div class="cover-publication">{{ report.meta.publication }}</div>
+    <div class="cover-report-title">{{ report.meta.report_title }}</div>
+    <div class="cover-tagline">{{ report.meta.edition_tagline }}</div>
+    <div class="cover-sub">{{ report.meta.period_label }} &nbsp;·&nbsp; Data as of {{ report.meta.data_as_of.strftime("%B %-d, %Y") }}</div>
+  </div>
+</section>
+
+{# ---------- Introduction ---------- #}
+<section class="intro">
+  {% for s in report.introduction.sections %}
+  <h3 class="subhead">{{ s.subhead }}</h3>
+  <p>{{ s.body }}</p>
+  {% endfor %}
+</section>
+
+{# ---------- Master list ---------- #}
+<section class="page-section master">
+  <div class="section-banner">
+    <div class="banner-title">TSXV Top 50 Metals Miners</div>
+    <div class="banner-sub">A Summary of the Top 50 TSXV Mining Stocks by Sector</div>
+  </div>
+  <h4 class="figure-label">Figure 1: TSXV Top 50 Miners by Sector</h4>
+  <div class="master-cols">
+    {% for column in master_columns %}
+    <div class="master-col">
+      {% for sector in column %}
+      <table class="sector-table">
+        <thead>
+          <tr>
+            <th class="sector-name" colspan="3">{{ sector.name }}</th>
+            <th class="mktcap-label">Mkt Cap CAD$ mn</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in sector.entries %}
+          <tr>
+            <td class="rank">{{ e.rank }}</td>
+            <td>{{ e.company }}</td>
+            <td class="ticker">{{ e.ticker }}</td>
+            <td class="num">{{ e.market_cap_cad_mn | money(1) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{# ---------- Category sections ---------- #}
+{% for cat in report.categories %}
+<section class="page-section category">
+  <div class="cat-band">
+    <div class="cat-name">{{ cat.category }}</div>
+    <div class="cat-tagline">{{ cat.tagline }}</div>
+  </div>
+
+  {% for s in cat.intro.sections %}
+  <h3 class="subhead">{{ s.subhead }}</h3>
+  <p>{{ s.body }}</p>
+  {% endfor %}
+
+  {% if cat.chart %}
+  <div class="figure">
+    <h4 class="figure-label">Figure {{ figure_numbers[loop.index0] }}: {{ cat.chart.title }}</h4>
+    {{ chart_svgs[loop.index0] | safe }}
+  </div>
+  {% endif %}
+
+  {% for co in cat.companies %}
+  <div class="company">
+    <div class="company-bar">{{ co.name }} ({{ co.ticker }})</div>
+    <table class="company-table">
+      <thead>
+        <tr>
+          <th>Main Regions of Operations</th>
+          <th>Market Cap CAD$ mn</th>
+          <th>Price CAD$</th>
+          <th>52 week High CAD$</th>
+          <th>52-week Low $CAD</th>
+          <th>% chg 3 mth</th>
+          <th>% chg 12 mth</th>
+          {% if show_ratio_columns %}
+          <th class="nowrap">P/B</th>
+          <th>Upside to Target</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ co.table.main_regions }}</td>
+          <td>{{ co.table.market_cap_cad_mn | money(1) }}</td>
+          <td>{{ co.table.price_cad | money(2) }}</td>
+          <td>{{ co.table.wk52_high_cad | money(2) }}</td>
+          <td>{{ co.table.wk52_low_cad | money(2) }}</td>
+          <td>{{ co.table.chg_3mo_pct | pct }}</td>
+          <td>{{ co.table.chg_12mo_pct | pct }}</td>
+          {% if show_ratio_columns %}
+          <td>{{ co.table.pb | money(1) if co.table.pb is not none else "–" }}</td>
+          <td>{{ co.table.upside_to_target_pct | pct if co.table.upside_to_target_pct is not none else "–" }}</td>
+          {% endif %}
+        </tr>
+      </tbody>
+    </table>
+    <h4 class="company-subhead">{{ co.subhead }}</h4>
+    <p class="blurb"><b>Company:</b> {{ co.blurbs.company }}</p>
+    <p class="blurb"><b>Recent Operations:</b> {{ co.blurbs.recent_operations }}</p>
+    <p class="blurb"><b>Finances:</b> {{ co.blurbs.finances }}</p>
+    <p class="blurb"><b>Outlook:</b> {{ co.blurbs.outlook }}</p>
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{# ---------- Glossary & disclaimer ---------- #}
+<section class="page-section glossary">
+  <div class="section-banner">
+    <div class="banner-title">Glossary &amp; Disclaimer</div>
+  </div>
+  {% for g in report.glossary %}
+  <p class="glossary-entry"><b>{{ g.term }}:</b> {{ g.definition }}</p>
+  {% endfor %}
+  <p class="disclaimer">{{ report.disclaimer }}</p>
+</section>
+
+</body>
+</html>

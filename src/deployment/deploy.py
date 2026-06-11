@@ -185,6 +185,7 @@ def main() -> None:
     if env in ("develop", "production"):
         subprocess.run([*deploy_args, "src/deployment/modal_app.py"], check=True, env=deploy_env)
         subprocess.run([*deploy_args, "src/deployment/modal_workers.py"], check=True, env=deploy_env)
+        subprocess.run([*deploy_args, "src/deployment/modal_pdf.py"], check=True, env=deploy_env)
         subprocess.run([*deploy_args, "src/deployment/modal_mcp_finance.py"], check=True, env=deploy_env)
     else:
         print(f"Unknown environment: {env}")

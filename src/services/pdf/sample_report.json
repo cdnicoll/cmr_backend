@@ -1,0 +1,112 @@
+{
+  "meta": {
+    "publication": "Canadian Mining Report",
+    "report_title": "TSXV Top 50 Metal Miners",
+    "edition_tagline": "Golden Times",
+    "period_label": "Q2 2026",
+    "data_as_of": "2026-06-11",
+    "currency": "CAD",
+    "cover_image": null
+  },
+  "introduction": {
+    "sections": [
+      {
+        "subhead": "An overview of the largest market cap miners listed on the TSXV",
+        "body": "PLACEHOLDER intro prose. This sample exists to exercise the layout only — every numeric value in this file is an illustrative placeholder; live runs pull all numbers from the ticker MCP."
+      },
+      {
+        "subhead": "Gold nearing all-time highs and silver surging",
+        "body": "PLACEHOLDER prose covering the quarter's commodity backdrop, sector rotation, and what it means for the TSXV's largest mining names."
+      }
+    ]
+  },
+  "master_list": [
+    { "rank": 1, "company": "Santacruz Silver Mining", "ticker": "SCZ.V", "category": "Silver", "market_cap_cad_mn": 401.2 },
+    { "rank": 4, "company": "1911 Gold Corporation", "ticker": "AUMB.V", "category": "Gold", "market_cap_cad_mn": 312.5 },
+    { "rank": 6, "company": "OMAI Gold Mines", "ticker": "OMG.V", "category": "Gold", "market_cap_cad_mn": 248.0 },
+    { "rank": 9, "company": "NorthIsle Copper and Gold", "ticker": "NCX.V", "category": "Copper & Base Metals", "market_cap_cad_mn": 220.1 }
+  ],
+  "categories": [
+    {
+      "category": "Gold",
+      "tagline": "Drivers Could Continue To Align In Gold's Favour",
+      "intro": {
+        "sections": [
+          {
+            "subhead": "Some economic drivers already favoring gold",
+            "body": "PLACEHOLDER prose on macro drivers, real rates, and central-bank buying that frame the gold section for the edition."
+          }
+        ]
+      },
+      "chart": {
+        "title": "Gold Price Performance",
+        "type": "line",
+        "x_label": "Date",
+        "y_label": "USD/oz",
+        "series": [
+          {
+            "name": "Gold",
+            "points": [
+              { "t": "2025-07-01", "v": 2360 },
+              { "t": "2025-10-01", "v": 2620 },
+              { "t": "2026-01-01", "v": 2710 },
+              { "t": "2026-04-01", "v": 2880 },
+              { "t": "2026-06-01", "v": 2945 }
+            ]
+          }
+        ]
+      },
+      "companies": [
+        {
+          "name": "1911 Gold Corporation",
+          "ticker": "AUMB.V",
+          "table": {
+            "main_regions": "Canada - Manitoba",
+            "market_cap_cad_mn": 312.5,
+            "price_cad": 0.62,
+            "wk52_high_cad": 0.78,
+            "wk52_low_cad": 0.21,
+            "chg_3mo_pct": 12.5,
+            "chg_12mo_pct": 140.3,
+            "pb": 1.8,
+            "upside_to_target_pct": 65.0
+          },
+          "subhead": "Consolidated land position in the Rice Lake gold belt",
+          "blurbs": {
+            "company": "PLACEHOLDER company overview describing the business, flagship assets, and stage of development.",
+            "recent_operations": "PLACEHOLDER recent operations summary — drill results, production, permitting milestones.",
+            "finances": "PLACEHOLDER financing summary — cash position, burn rate, recent raises.",
+            "outlook": "PLACEHOLDER outlook — catalysts expected over the coming quarters."
+          }
+        },
+        {
+          "name": "OMAI Gold Mines",
+          "ticker": "OMG.V",
+          "table": {
+            "main_regions": "Guyana",
+            "market_cap_cad_mn": 248.0,
+            "price_cad": 0.41,
+            "wk52_high_cad": 0.55,
+            "wk52_low_cad": 0.12,
+            "chg_3mo_pct": -8.2,
+            "chg_12mo_pct": 210.0,
+            "pb": null,
+            "upside_to_target_pct": null
+          },
+          "subhead": "Resource growth at the historic Omai project",
+          "blurbs": {
+            "company": "PLACEHOLDER company overview. This company carries null P/B and Upside to exercise the optional-column behavior.",
+            "recent_operations": "PLACEHOLDER recent operations summary.",
+            "finances": "PLACEHOLDER financing summary.",
+            "outlook": "PLACEHOLDER outlook."
+          }
+        }
+      ]
+    }
+  ],
+  "glossary": [
+    { "term": "P/B", "definition": "Price-to-book ratio: market cap divided by book value of equity." },
+    { "term": "Upside to Target", "definition": "Percent difference between current price and consensus analyst target." }
+  ],
+  "disclaimer": "PLACEHOLDER standard disclaimer boilerplate. This report is for informational purposes only and does not constitute investment advice."
+}
