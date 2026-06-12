@@ -81,8 +81,8 @@ class CompanyTable(BaseModel):
     price_cad: float
     wk52_high_cad: float
     wk52_low_cad: float
-    chg_3mo_pct: float
-    chg_12mo_pct: float
+    chg_3mo_pct: float | None = None
+    chg_12mo_pct: float | None = None
     pb: float | None = None
     upside_to_target_pct: float | None = None
 

@@ -22,7 +22,9 @@ def _money(value: float, decimals: int = 2) -> str:
     return f"{value:,.{decimals}f}"
 
 
-def _pct(value: float) -> str:
+def _pct(value: float | None) -> str:
+    if value is None:
+        return "–"
     return f"{value:,.1f}%"
 
 
