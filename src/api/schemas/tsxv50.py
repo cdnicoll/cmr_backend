@@ -16,6 +16,7 @@ class SnapshotEntry(BaseModel):
         "Silver",
         "Lithium",
         "Uranium",
+        "Critical Minerals & Other",
         "Unclassified",
     ]
 

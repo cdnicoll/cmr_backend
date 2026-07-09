@@ -15,6 +15,7 @@ Category = Literal[
     "Silver",
     "Lithium",
     "Uranium",
+    "Critical Minerals & Other",
     "Unclassified",
 ]
 
@@ -26,6 +27,7 @@ SECTOR_ORDER: list[str] = [
     "Silver",
     "Lithium",
     "Uranium",
+    "Critical Minerals & Other",
     "Unclassified",
 ]
 

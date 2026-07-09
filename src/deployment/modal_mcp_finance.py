@@ -101,7 +101,7 @@ def serve():
     @mcp.tool()
     def get_tsxv50_by_category(category: str) -> list[dict]:
         """Return TSXV50 watchlist entries (symbol, name, category) matching the given category.
-        Valid categories: Gold, Copper & Base Metals, Royalty & Streaming, Silver, Lithium, Uranium, Unclassified.
+        Valid categories: Gold, Copper & Base Metals, Royalty & Streaming, Silver, Lithium, Uranium, Critical Minerals & Other, Unclassified.
         Returns an empty list if the loaded snapshot predates categorization (legacy snapshot)."""
         return [entry for entry in TSXV50_ENTRIES if entry.get("category") == category]
 
