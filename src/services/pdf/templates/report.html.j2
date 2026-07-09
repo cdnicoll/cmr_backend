@@ -129,6 +129,15 @@
     <p class="blurb"><b>Outlook:</b> {{ co.blurbs.outlook }}</p>
   </div>
   {% endfor %}
+
+  {% if cat.limited_activity %}
+  <div class="limited-activity">
+    <h4 class="limited-activity-title">Companies with Limited Activity This Period</h4>
+    {% for la in cat.limited_activity %}
+    <p class="limited-activity-entry"><b>{{ la.name }} ({{ la.ticker }}):</b> {{ la.note }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
 </section>
 {% endfor %}
 

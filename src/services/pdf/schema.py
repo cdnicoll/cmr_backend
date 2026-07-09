@@ -6,7 +6,7 @@ change here must update that doc (and vice versa).
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 Category = Literal[
     "Gold",
@@ -104,6 +104,15 @@ class Company(BaseModel):
     blurbs: Blurbs
 
 
+class LimitedActivityEntry(BaseModel):
+    """A quiet company covered by a one-line note instead of a full profile.
+    It keeps its master_list row; only the profile is compressed."""
+
+    name: str
+    ticker: str
+    note: str
+
+
 class CategoryBlock(BaseModel):
     category: Category
     tagline: str
@@ -111,7 +120,16 @@ class CategoryBlock(BaseModel):
     # Optional: the commodity-series source is an upstream gap; a category
     # without a chart renders without its figure rather than failing.
     chart: Chart | None = None
-    companies: list[Company] = Field(min_length=1)
+    companies: list[Company] = Field(default_factory=list)
+    limited_activity: list[LimitedActivityEntry] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def has_content(self) -> "CategoryBlock":
+        if not self.companies and not self.limited_activity:
+            raise ValueError(
+                "category block must have at least one company or limited_activity entry"
+            )
+        return self
 
 
 class GlossaryEntry(BaseModel):

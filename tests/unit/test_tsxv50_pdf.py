@@ -85,6 +85,44 @@ def test_render_html_hides_ratio_columns_when_all_null(sample):
     assert "<th>Upside to Target</th>" not in html
 
 
+def test_limited_activity_renders(sample):
+    edition = copy.deepcopy(sample)
+    edition["categories"][0]["limited_activity"] = [
+        {
+            "name": "Quiet Gold Corp",
+            "ticker": "QGC.V",
+            "note": "No press releases issued this period; the fully funded Phase 2 drill program remains scheduled for Q3.",
+        }
+    ]
+    html = render_html(validate_report(edition))
+    assert "Companies with Limited Activity This Period" in html
+    assert "Quiet Gold Corp (QGC.V)" in html
+
+
+def test_limited_activity_absent_by_default(sample):
+    html = render_html(validate_report(sample))
+    assert "Companies with Limited Activity" not in html
+
+
+def test_category_with_only_limited_activity_validates(sample):
+    edition = copy.deepcopy(sample)
+    edition["categories"][0]["companies"] = []
+    edition["categories"][0]["limited_activity"] = [
+        {"name": "Quiet Gold Corp", "ticker": "QGC.V", "note": "Quiet period."}
+    ]
+    report = validate_report(edition)
+    assert report.categories[0].companies == []
+    assert report.categories[0].limited_activity[0].ticker == "QGC.V"
+
+
+def test_category_with_no_companies_or_limited_activity_rejected(sample):
+    bad = copy.deepcopy(sample)
+    bad["categories"][0]["companies"] = []
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any(i["path"].startswith("categories.0") for i in exc.value.issues)
+
+
 def _full_edition(sample: dict) -> dict:
     """Synthesize a full 51-company edition from the sample to stress page-break behavior."""
     edition = copy.deepcopy(sample)

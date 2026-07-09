@@ -315,6 +315,24 @@ p { margin: 0 0 7pt; }
 
 .blurb b { color: var(--ink); }
 
+.limited-activity {
+  page-break-inside: avoid;
+  margin-bottom: 13pt;
+}
+
+.limited-activity-title {
+  color: var(--brand-red);
+  font-size: 10.5pt;
+  font-weight: bold;
+  border-bottom: 0.75pt solid var(--brand-red);
+  padding-bottom: 2pt;
+  margin: 4pt 0 5pt;
+}
+
+.limited-activity-entry { margin: 0 0 5pt; }
+
+.limited-activity-entry b { color: var(--ink); }
+
 /* ---------- Glossary & disclaimer ---------- */
 
 .glossary-entry { margin: 0 0 5pt; }
