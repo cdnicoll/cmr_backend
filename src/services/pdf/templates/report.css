@@ -94,6 +94,7 @@ p { margin: 0 0 7pt; }
   right: 0;
   bottom: 0;
   height: 79mm;
+  overflow: hidden;
   background: var(--brand-red);
   color: #FFFFFF;
   padding: 14mm 14mm 0;
@@ -114,7 +115,8 @@ p { margin: 0 0 7pt; }
 }
 
 .cover-tagline {
-  font-size: 38pt;
+  font-size: 32pt;
+  line-height: 1.15;
   font-weight: bold;
   letter-spacing: 0.06em;
   text-transform: uppercase;
