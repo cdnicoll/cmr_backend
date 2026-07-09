@@ -65,7 +65,9 @@ def serve():
         return json.loads(value) if isinstance(value, str) else value
 
     async def _load_tsxv50() -> tuple[list[str], list[dict]]:
-        conn = await asyncpg.connect(os.environ["TRANSACTION_POOLER_URL"])
+        conn = await asyncpg.connect(
+            os.environ["TRANSACTION_POOLER_URL"], statement_cache_size=0
+        )
         row = await conn.fetchrow(
             "SELECT symbols, entries FROM public.tsxv50_snapshots ORDER BY created_at DESC LIMIT 1"
         )
