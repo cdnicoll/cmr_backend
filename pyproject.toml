@@ -50,6 +50,7 @@ dev-dependencies = [
     "pytest>=8.0.0",
     "ruff>=0.8.0",
     "weasyprint>=62",
+    "yfinance>=1.5.1",
 ]
 
 [tool.ruff]

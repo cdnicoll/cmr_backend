@@ -171,7 +171,7 @@ def serve():
         (price, market cap, sector, P/E) plus chg_3mo_pct and chg_12mo_pct — percent price
         change over ~3 and ~12 calendar months, computed from adjusted closes and rounded
         to 1 decimal (null when history doesn't cover the window, e.g. new listings).
-        Uses 10 concurrent threads to fetch all 51 symbols efficiently."""
+        Uses 10 concurrent threads to fetch all 50 watchlist symbols efficiently."""
         def fetch_summary(symbol: str) -> dict:
             try:
                 ticker = yf.Ticker(symbol)

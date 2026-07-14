@@ -22,9 +22,11 @@ class SnapshotEntry(BaseModel):
 
     @field_validator("symbol")
     @classmethod
-    def symbol_has_v_suffix(cls, v: str) -> str:
-        if not v.endswith(".V"):
-            raise ValueError("symbol must end with '.V'")
+    def symbol_has_exchange_suffix(cls, v: str) -> str:
+        # .TO allowed for Venture 50 companies that uplist to the TSX mid-year
+        # (e.g. AGMR.V -> AGMR.TO, Feb 2026) so their symbols keep resolving.
+        if not v.endswith((".V", ".TO")):
+            raise ValueError("symbol must end with '.V' or '.TO'")
         return v
 
     @field_validator("name")
