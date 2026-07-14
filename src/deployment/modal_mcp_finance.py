@@ -52,6 +52,7 @@ def serve():
     import concurrent.futures
     import json
     import os
+    import time
 
     import asyncpg
     import yfinance as yf
@@ -107,6 +108,32 @@ def serve():
         Returns an empty list if the loaded snapshot predates categorization (legacy snapshot)."""
         return [entry for entry in TSXV50_ENTRIES if entry.get("category") == category]
 
+    def _ticker_info_with_retry(symbol: str, attempts: int = 3) -> dict:
+        """Fetch yf.Ticker(symbol).info, retrying transient failures.
+
+        Yahoo intermittently returns an info payload with null price fields
+        (no exception raised) — one such blip put a null price_cad into a
+        render payload and blocked a PDF. Retry on exceptions AND on missing
+        essential fields; return whatever the last attempt produced so truly
+        dead symbols still come back (empty) rather than erroring the batch.
+        """
+        last_exc: Exception | None = None
+        info: dict = {}
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(2**attempt)  # 2s, 4s
+            try:
+                info = yf.Ticker(symbol).info
+                last_exc = None
+            except Exception as e:
+                last_exc = e
+                continue
+            if info.get("currentPrice") is not None and info.get("marketCap") is not None:
+                return info
+        if last_exc is not None:
+            raise last_exc
+        return info
+
     @mcp.tool()
     def get_stock_info(symbols: list[str]) -> list[dict]:
         """Get fundamental data (P/E, market cap, sector, description, 52-week range, etc.) for one or more symbols."""
@@ -125,7 +152,7 @@ def serve():
         results = []
         for symbol in symbols:
             try:
-                info = yf.Ticker(symbol).info
+                info = _ticker_info_with_retry(symbol)
                 results.append({
                     "symbol": symbol,
                     "name": info.get("longName"),
@@ -175,7 +202,7 @@ def serve():
         def fetch_summary(symbol: str) -> dict:
             try:
                 ticker = yf.Ticker(symbol)
-                info = ticker.info
+                info = _ticker_info_with_retry(symbol)
                 summary = {
                     "symbol": symbol,
                     "name": info.get("longName"),
