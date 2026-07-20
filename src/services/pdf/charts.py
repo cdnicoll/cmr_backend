@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from src.services.pdf.schema import Chart  # noqa: E402
 
-BRAND_RED = "#CF1F2E"
+BRAND_RED = "#A43331"  # logo red; keep in sync with templates/report.css --brand-red
 INK = "#1A1A1A"
 MUTED = "#6B6B6B"
 GRID = "#DDDDDD"
@@ -61,7 +61,11 @@ def render_chart_svg(chart: Chart) -> str:
         if chart.y_label:
             ax.set_ylabel(chart.y_label)
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %y"))
-        ax.yaxis.set_major_formatter(lambda v, _: f"{v:,.0f}")
+        # Decimals follow the axis span so low-priced series (e.g. copper
+        # ~$4.50/lb) keep usable tick labels instead of rounding to integers.
+        span = ax.get_ylim()[1] - ax.get_ylim()[0]
+        decimals = 2 if span < 5 else 1 if span < 50 else 0
+        ax.yaxis.set_major_formatter(lambda v, _: f"{v:,.{decimals}f}")
         if len(chart.series) > 1:
             ax.legend(loc="upper left")
         fig.tight_layout()

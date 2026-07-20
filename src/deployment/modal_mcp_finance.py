@@ -55,6 +55,7 @@ def serve():
     import time
 
     import asyncpg
+    import pandas as pd
     import yfinance as yf
     from fastmcp import FastMCP
     from fastmcp.server.http import create_streamable_http_app
@@ -170,20 +171,27 @@ def serve():
         return results
 
     @mcp.tool()
-    def get_stock_history(symbols: list[str], period: str = "1mo") -> dict:
+    def get_stock_history(symbols: list[str], period: str = "1mo", interval: str = "1d") -> dict:
         """Get OHLCV price history for one or more symbols via a single batched Yahoo Finance request.
         Valid periods: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max.
+        Valid intervals: 1d, 1wk, 1mo — use 1wk/1mo for long periods to keep responses small.
         Returns a dict keyed by symbol, each containing a list of {Date, Open, High, Low, Close, Volume} records."""
         try:
-            raw = yf.download(symbols, period=period, auto_adjust=True, progress=False)
-            if len(symbols) == 1:
-                df = raw.reset_index()
-                df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-                return {symbols[0]: df.to_dict(orient="records")}
+            # group_by="ticker" keys the column MultiIndex by symbol; the default
+            # ("column") keys by price field, which made raw[symbol] a KeyError.
+            raw = yf.download(
+                symbols,
+                period=period,
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+                group_by="ticker",
+            )
             result = {}
             for symbol in symbols:
                 try:
-                    df = raw[symbol].reset_index()
+                    df = raw[symbol] if isinstance(raw.columns, pd.MultiIndex) else raw
+                    df = df.dropna(how="all").reset_index()
                     df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
                     result[symbol] = df.to_dict(orient="records")
                 except Exception as e:
