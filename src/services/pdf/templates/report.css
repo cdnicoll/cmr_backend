@@ -19,8 +19,8 @@
 }
 
 :root {
-  --brand-red: #CF1F2E;
-  --header-maroon: #B02427;
+  --brand-red: #A43331; /* logo red: the 2017 deck's CMYK 15/100/100/6 as rendered; keep in sync with assets/brand SVGs */
+  --header-maroon: #A43331;
   --row-gray: #F2F2F2;
   --ink: #1A1A1A;
   --muted: #6B6B6B;
@@ -50,11 +50,49 @@ p { margin: 0 0 7pt; }
 }
 
 .cover-hero {
+  position: relative;
   height: 200mm;
-  background: linear-gradient(180deg, #3C434A 0%, #23272B 70%, #15171A 100%);
+  background-color: #23272B;
   background-size: cover;
   background-position: center;
 }
+
+.hero-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(21, 23, 26, 0.70);
+}
+
+/* Lockup proportions follow the 2017 deck (icon:wordmark ≈ 122:100, same-size lines,
+   regular over bold). Wordmark face is the body placeholder until the Gibson-vs-free
+   typography decision lands. */
+.cover-lockup {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lockup-icon {
+  width: 20.5mm;
+  height: 30mm;
+  margin-right: 7mm;
+}
+
+.lockup-words {
+  color: #FFFFFF;
+  font-size: 35pt;
+  line-height: 1.0;
+}
+
+.lockup-strong { font-weight: bold; }
 
 .cover-top {
   position: absolute;
@@ -62,23 +100,6 @@ p { margin: 0 0 7pt; }
   left: 14mm;
   right: 14mm;
   display: block;
-}
-
-.cover-logo {
-  float: left;
-  color: #FFFFFF;
-  font-size: 13pt;
-  font-weight: bold;
-  letter-spacing: 0.02em;
-}
-
-.cover-logo .logo-mark {
-  display: inline-block;
-  width: 11pt;
-  height: 11pt;
-  background: var(--brand-red);
-  margin-right: 5pt;
-  vertical-align: -1pt;
 }
 
 .cover-period {
@@ -101,16 +122,10 @@ p { margin: 0 0 7pt; }
   text-align: center;
 }
 
-.cover-publication {
-  font-size: 11pt;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  margin-bottom: 5mm;
-}
-
 .cover-report-title {
   font-size: 21pt;
   font-weight: bold;
+  margin-top: 6mm;
   margin-bottom: 6mm;
 }
 
@@ -126,7 +141,7 @@ p { margin: 0 0 7pt; }
 
 .cover-sub {
   font-size: 10.5pt;
-  color: #F6D9DB;
+  color: #F1E0E0;
 }
 
 /* ---------- Shared ---------- */
@@ -153,7 +168,7 @@ p { margin: 0 0 7pt; }
 
 .section-banner .banner-sub {
   font-size: 9pt;
-  color: #F6D9DB;
+  color: #F1E0E0;
   margin-top: 1pt;
 }
 
@@ -209,7 +224,7 @@ p { margin: 0 0 7pt; }
 
 .sector-table th.mktcap-label {
   background: var(--header-maroon);
-  color: #F2D7D8;
+  color: #F1E0E0;
   text-align: right;
   font-weight: normal;
   font-size: 7pt;
@@ -260,7 +275,7 @@ p { margin: 0 0 7pt; }
 .cat-tagline {
   font-size: 10.5pt;
   margin-top: 3pt;
-  color: #F6D9DB;
+  color: #F1E0E0;
 }
 
 /* ---------- Company blocks ---------- */

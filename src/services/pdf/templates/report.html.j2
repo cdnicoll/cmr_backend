@@ -11,13 +11,17 @@
 
 {# ---------- Cover ---------- #}
 <section class="cover">
-  <div class="cover-hero"{% if report.meta.cover_image %} style="background-image: url('{{ report.meta.cover_image }}');"{% endif %}></div>
+  <div class="cover-hero" style="background-image: url('{{ report.meta.cover_image or "assets/cover-default.jpg" }}');">
+    <div class="hero-shade"></div>
+    <div class="cover-lockup">
+      <img class="lockup-icon" src="assets/cmr-icon.svg" alt="">
+      <div class="lockup-words">Canadian<br><span class="lockup-strong">Mining Report</span></div>
+    </div>
+  </div>
   <div class="cover-top">
-    <div class="cover-logo"><span class="logo-mark"></span>{{ report.meta.publication }}</div>
     <div class="cover-period">{{ report.meta.period_label }}</div>
   </div>
   <div class="cover-title-block">
-    <div class="cover-publication">{{ report.meta.publication }}</div>
     <div class="cover-report-title">{{ report.meta.report_title }}</div>
     <div class="cover-tagline">{{ report.meta.edition_tagline }}</div>
     <div class="cover-sub">{{ report.meta.period_label }} &nbsp;·&nbsp; Data as of {{ report.meta.data_as_of.strftime("%B %-d, %Y") }}</div>
