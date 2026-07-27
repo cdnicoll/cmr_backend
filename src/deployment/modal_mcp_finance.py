@@ -444,6 +444,25 @@ def serve():
         return result
 
     @mcp.tool()
+    async def get_draft(period_label: str, draft_slug: str = "primary") -> dict:
+        """Read the current state of one draft. Every pipeline role calls this first
+        on every turn — never trust conversation memory for state; a same-day gap and
+        a three-day gap must look identical. Returns the full row: {period_label,
+        draft_slug, status, meta, master_list, introduction, categories, synthesis,
+        finalize_result, conversation_ids, pdf_url, created_at, updated_at}, or
+        {"error": {"type": "not_found", ...}} if no draft exists yet for this
+        (period_label, draft_slug) — call start_report first in that case."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        if draft is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": f"no draft for period_label={period_label!r} draft_slug={draft_slug!r}; call start_report first",
+                }
+            }
+        return draft
+
+    @mcp.tool()
     async def list_drafts(period_label: str) -> list[dict]:
         """List every draft version for a period (discoverability across draft_slug
         versions), newest-updated first. Never used to auto-resolve which draft to act
