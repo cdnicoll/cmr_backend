@@ -315,6 +315,17 @@ def serve():
         return await drafts.set_meta(period_label, draft_slug, meta)
 
     @mcp.tool()
+    async def set_meta(period_label: str, meta: dict, draft_slug: str = "primary") -> dict:
+        """Update the draft's meta block: {publication, report_title, edition_tagline,
+        period_label (display string), data_as_of, currency, cover_image}. start_report
+        sets an initial version (usually with a placeholder edition_tagline, since the
+        real theme-based tagline isn't known until synthesis is done); call this again
+        later (finalizer) with the complete object once the real tagline is decided.
+        Full overwrite, not a merge — pass every field, not just the one that changed.
+        Returns the updated draft row."""
+        return await drafts.set_meta(period_label, draft_slug, meta)
+
+    @mcp.tool()
     async def set_master_list(
         period_label: str, master_list: list[dict], draft_slug: str = "primary"
     ) -> dict:
