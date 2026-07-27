@@ -94,6 +94,9 @@ def test_limited_activity_renders(sample):
             "note": "No press releases issued this period; the fully funded Phase 2 drill program remains scheduled for Q3.",
         }
     ]
+    edition["master_list"].append(
+        {"rank": 3, "company": "Quiet Gold Corp", "ticker": "QGC.V", "category": "Gold", "market_cap_cad_mn": 50.0}
+    )
     html = render_html(validate_report(edition))
     assert "Companies with Limited Activity This Period" in html
     assert "Quiet Gold Corp (QGC.V)" in html
@@ -110,6 +113,12 @@ def test_category_with_only_limited_activity_validates(sample):
     edition["categories"][0]["limited_activity"] = [
         {"name": "Quiet Gold Corp", "ticker": "QGC.V", "note": "Quiet period."}
     ]
+    # companies was cleared, so master_list must only carry the one remaining
+    # (now limited-activity) entry, or the completeness check rejects the
+    # dropped AUMB.V/OMG.V rows as orphaned.
+    edition["master_list"] = [
+        {"rank": 1, "company": "Quiet Gold Corp", "ticker": "QGC.V", "category": "Gold", "market_cap_cad_mn": 50.0}
+    ]
     report = validate_report(edition)
     assert report.categories[0].companies == []
     assert report.categories[0].limited_activity[0].ticker == "QGC.V"
@@ -121,6 +130,71 @@ def test_category_with_no_companies_or_limited_activity_rejected(sample):
     with pytest.raises(ReportValidationError) as exc:
         validate_report(bad)
     assert any(i["path"].startswith("categories.0") for i in exc.value.issues)
+
+
+# --- Report-level completeness validator (issue #2) ---
+# Closes the 2026-07-26 truncated-payload gap: a partial payload (missing
+# categories, duplicate tail rows) must fail here instead of rendering a
+# confident wrong PDF.
+
+
+def test_duplicate_master_list_ticker_rejected(sample):
+    bad = copy.deepcopy(sample)
+    bad["master_list"].append(dict(bad["master_list"][0]))
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("duplicate ticker(s) in master_list" in i["message"] for i in exc.value.issues)
+
+
+def test_orphaned_master_list_entry_rejected(sample):
+    """A master_list row with no matching company/limited_activity entry anywhere
+    in categories — the exact shape of the 07-26 truncated-payload failure, where
+    the master list outran what the categories actually contained."""
+    bad = copy.deepcopy(sample)
+    bad["master_list"].append(
+        {"rank": 3, "company": "Ghost Co", "ticker": "GHOST.V", "category": "Gold", "market_cap_cad_mn": 1.0}
+    )
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("GHOST.V" in i["message"] for i in exc.value.issues)
+
+
+def test_orphaned_category_entry_rejected(sample):
+    """A category has a company with no corresponding master_list row."""
+    bad = copy.deepcopy(sample)
+    ghost_company = copy.deepcopy(bad["categories"][0]["companies"][0])
+    ghost_company["name"] = "Ghost Co"
+    ghost_company["ticker"] = "GHOST2.V"
+    bad["categories"][0]["companies"].append(ghost_company)
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("GHOST2.V" in i["message"] for i in exc.value.issues)
+
+
+def test_non_contiguous_ranks_rejected(sample):
+    bad = copy.deepcopy(sample)
+    bad["master_list"][1]["rank"] = 5
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("contiguous" in i["message"] for i in exc.value.issues)
+
+
+def test_duplicate_ticker_across_categories_rejected(sample):
+    """The 07-26 degradation signature: a duplicate company row appended near
+    the end of a category's companies list."""
+    bad = copy.deepcopy(sample)
+    bad["categories"][0]["companies"].append(dict(bad["categories"][0]["companies"][0]))
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("duplicate ticker(s) across categories" in i["message"] for i in exc.value.issues)
+
+
+def test_valid_report_passes_completeness_check(sample):
+    """The fixture itself must be internally consistent — every master_list
+    ticker matches exactly one category entry and ranks are contiguous."""
+    report = validate_report(sample)
+    assert len(report.master_list) == 2
+    assert {m.ticker for m in report.master_list} == {"AUMB.V", "OMG.V"}
 
 
 def _full_edition(sample: dict) -> dict:

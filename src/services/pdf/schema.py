@@ -145,6 +145,73 @@ class Report(BaseModel):
     glossary: list[GlossaryEntry] = Field(default_factory=list)
     disclaimer: str
 
+    @model_validator(mode="after")
+    def master_list_matches_categories(self) -> "Report":
+        """Cross-checks master_list against every category block's companies and
+        limited_activity entries (issue #2): every master_list row must have exactly
+        one matching entry across categories (by ticker — company/name fields differ
+        between MasterListEntry and Company/LimitedActivityEntry, so ticker is the
+        only reliable join key), no ticker may repeat anywhere in the payload, and
+        ranks must be contiguous starting at 1. This is what closes the 2026-07-26
+        truncated-payload gap: a partial payload (missing categories, duplicate
+        tail rows) must fail here instead of rendering a confident wrong PDF.
+        Collects every violation before raising, so a bad payload is diagnosed in
+        one round-trip instead of one error at a time."""
+        issues: list[str] = []
+
+        category_ticker_counts: dict[str, int] = {}
+        for block in self.categories:
+            for entry in [*block.companies, *block.limited_activity]:
+                category_ticker_counts[entry.ticker] = (
+                    category_ticker_counts.get(entry.ticker, 0) + 1
+                )
+
+        duplicate_category_tickers = sorted(
+            ticker for ticker, count in category_ticker_counts.items() if count > 1
+        )
+        if duplicate_category_tickers:
+            issues.append(
+                f"duplicate ticker(s) across categories: {duplicate_category_tickers}"
+            )
+
+        master_ticker_counts: dict[str, int] = {}
+        ranks: list[int] = []
+        for entry in self.master_list:
+            master_ticker_counts[entry.ticker] = (
+                master_ticker_counts.get(entry.ticker, 0) + 1
+            )
+            ranks.append(entry.rank)
+            if entry.ticker not in category_ticker_counts:
+                issues.append(
+                    f"master_list rank {entry.rank} ({entry.ticker}) has no matching "
+                    "company or limited_activity entry in categories"
+                )
+
+        duplicate_master_tickers = sorted(
+            ticker for ticker, count in master_ticker_counts.items() if count > 1
+        )
+        if duplicate_master_tickers:
+            issues.append(f"duplicate ticker(s) in master_list: {duplicate_master_tickers}")
+
+        orphaned_category_tickers = sorted(
+            set(category_ticker_counts) - set(master_ticker_counts)
+        )
+        if orphaned_category_tickers:
+            issues.append(
+                "categories contain ticker(s) with no master_list entry: "
+                f"{orphaned_category_tickers}"
+            )
+
+        sorted_ranks = sorted(ranks)
+        if sorted_ranks != list(range(1, len(sorted_ranks) + 1)):
+            issues.append(
+                f"master_list ranks must be contiguous starting at 1; got {sorted_ranks}"
+            )
+
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
 
 class ReportValidationError(Exception):
     """report_json failed schema validation; carries structured issues for the agent."""

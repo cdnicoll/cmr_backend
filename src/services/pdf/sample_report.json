@@ -21,10 +21,8 @@
     ]
   },
   "master_list": [
-    { "rank": 1, "company": "Santacruz Silver Mining", "ticker": "SCZ.V", "category": "Silver", "market_cap_cad_mn": 401.2 },
-    { "rank": 4, "company": "1911 Gold Corporation", "ticker": "AUMB.V", "category": "Gold", "market_cap_cad_mn": 312.5 },
-    { "rank": 6, "company": "OMAI Gold Mines", "ticker": "OMG.V", "category": "Gold", "market_cap_cad_mn": 248.0 },
-    { "rank": 9, "company": "NorthIsle Copper and Gold", "ticker": "NCX.V", "category": "Copper & Base Metals", "market_cap_cad_mn": 220.1 }
+    { "rank": 1, "company": "1911 Gold Corporation", "ticker": "AUMB.V", "category": "Gold", "market_cap_cad_mn": 312.5 },
+    { "rank": 2, "company": "OMAI Gold Mines", "ticker": "OMG.V", "category": "Gold", "market_cap_cad_mn": 248.0 }
   ],
   "categories": [
     {

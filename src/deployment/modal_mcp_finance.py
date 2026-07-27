@@ -37,14 +37,25 @@ def _pct_change_from_baseline(closes: list[tuple[date, float]], target: date) ->
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("fastmcp", "yfinance", "asyncpg")
+    .pip_install("fastmcp", "yfinance", "asyncpg", "pydantic")
+    # Needed for the report-draft tools' `from src.services...` imports below —
+    # schema.py/tsxv50_report_drafts_dao.py are pure Python (no templates/assets),
+    # so unlike modal_pdf.py this doesn't also need add_local_dir for anything.
+    .add_local_python_source("src")
 )
 
 
 @app.function(
     image=image,
     keep_warm=1,
-    secrets=[modal.Secret.from_name("finance-mcp-credentials")],
+    secrets=[
+        modal.Secret.from_name("finance-mcp-credentials"),
+        # The report-draft tools' DAO uses load_settings() (src/models/config.py),
+        # which requires the full Settings model, not just TRANSACTION_POOLER_URL.
+        # Matches modal_pdf.py's secrets exactly — same live Supabase project.
+        modal.Secret.from_name("supabase-credentials-develop"),
+        modal.Secret.from_name("app-config-develop"),
+    ],
 )
 @modal.asgi_app()
 def serve():
@@ -53,6 +64,7 @@ def serve():
     import json
     import os
     import time
+    from datetime import datetime, timezone
 
     import asyncpg
     import pandas as pd
@@ -62,6 +74,9 @@ def serve():
     from starlette.middleware import Middleware
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
+
+    from src.services.pdf.schema import ReportValidationError, validate_report
+    from src.services.supabase import tsxv50_report_drafts_dao as drafts
 
     def _decode_jsonb(value):
         return json.loads(value) if isinstance(value, str) else value
@@ -260,6 +275,181 @@ def serve():
         payload fails the schema."""
         pdf_fn = modal.Function.from_name("CMR-PDF", "generate_pdf")
         return pdf_fn.remote(report_json)
+
+    def _assemble_report_json(
+        draft: dict, glossary: list[dict] | None = None, disclaimer: str | None = None
+    ) -> dict:
+        """Build a report_json dict from a draft row's stored fields. glossary/disclaimer
+        are renderer-supplied at render time (Phase D static boilerplate); finalize_report
+        uses placeholders since it only needs to check master_list/categories/meta/
+        introduction completeness, not the standing renderer-owned text."""
+        categories_map = draft.get("categories") or {}
+        categories = []
+        for category_name, entry in categories_map.items():
+            content = (entry or {}).get("content")
+            if content:
+                categories.append({"category": category_name, **content})
+        return {
+            "meta": draft.get("meta"),
+            "introduction": draft.get("introduction"),
+            "master_list": draft.get("master_list"),
+            "categories": categories,
+            "glossary": glossary if glossary is not None else [],
+            "disclaimer": disclaimer if disclaimer is not None else "[disclaimer pending render]",
+        }
+
+    @mcp.tool()
+    async def start_report(period_label: str, meta: dict, draft_slug: str = "primary") -> dict:
+        """Start or resume a report draft. period_label is the normalized slug (e.g.
+        "2026-Q2"), distinct from meta.period_label (the display string, e.g. "Q2 2026
+        (April 1 - June 30, 2026)"). draft_slug defaults to "primary" — the common
+        single-draft-per-period case; pass a different slug (e.g. "editorial-a") only
+        when deliberately trying multiple versions of the same period.
+        Calling this again with the same (period_label, draft_slug) resumes the existing
+        draft instead of creating a new one — this is the fresh-chat resume path; always
+        call this first on any turn, never assume prior state from conversation memory.
+        Returns the full draft row: {period_label, draft_slug, status, meta, master_list,
+        introduction, categories, synthesis, finalize_result, conversation_ids, pdf_url,
+        created_at, updated_at}."""
+        await drafts.get_or_create_draft(period_label, draft_slug)
+        return await drafts.set_meta(period_label, draft_slug, meta)
+
+    @mcp.tool()
+    async def set_master_list(
+        period_label: str, master_list: list[dict], draft_slug: str = "primary"
+    ) -> dict:
+        """Write Phase A's ranked master list (orchestrator only). Each entry:
+        {rank, company, ticker, category, market_cap_cad_mn}, ranks contiguous from 1.
+        Returns the updated draft row."""
+        return await drafts.set_master_list(period_label, draft_slug, master_list)
+
+    @mcp.tool()
+    async def set_introduction(
+        period_label: str, introduction: dict, draft_slug: str = "primary"
+    ) -> dict:
+        """Write the whole-report introduction (finalizer, once synthesis is done):
+        {sections: [{subhead, body}, ...]}. This is the executive-summary-level content
+        that needs full-draft visibility, not per-category drafting. Returns the updated
+        draft row."""
+        return await drafts.set_introduction(period_label, draft_slug, introduction)
+
+    @mcp.tool()
+    async def set_category_research(
+        period_label: str, category: str, research: dict, draft_slug: str = "primary"
+    ) -> dict:
+        """Write one category's Phase A.5 research (category-researcher). Idempotent per
+        category name — re-running overwrites only that category's research, leaving every
+        other category's research and any already-drafted content untouched. Call this
+        once per category; the synthesist requires every category's research to exist
+        before it can run. Returns the updated draft row."""
+        return await drafts.upsert_category_research(period_label, draft_slug, category, research)
+
+    @mcp.tool()
+    async def set_synthesis(period_label: str, synthesis: dict, draft_slug: str = "primary") -> dict:
+        """Write the synthesist's cross-company trend-detection/sector-comparison output.
+        Runs once, only after every category's research exists — internal editorial
+        machinery, never printed in the rendered report. Returns the updated draft row."""
+        return await drafts.set_synthesis(period_label, draft_slug, synthesis)
+
+    @mcp.tool()
+    async def add_category(
+        period_label: str,
+        category: str,
+        content: dict,
+        sources: list[dict] | None = None,
+        draft_slug: str = "primary",
+    ) -> dict:
+        """Write one category's drafted content (category-drafter). content must match the
+        report_json category shape: {tagline, intro, chart, companies, limited_activity}.
+        Idempotent per category name — editing an already-drafted category is the normal
+        path, not an exception. Clears any existing finalize_result and resets status to
+        in_progress: a stale "locked" verdict must never survive an edit. Returns the
+        updated draft row."""
+        return await drafts.upsert_category_content(period_label, draft_slug, category, content, sources)
+
+    @mcp.tool()
+    async def finalize_report(period_label: str, draft_slug: str = "primary") -> dict:
+        """Run the completeness/duplicate check (issue #2) against the current draft: every
+        master_list company must appear in exactly one category block, no duplicate tickers
+        anywhere, ranks contiguous from 1, plus every category's own schema constraints.
+        Re-runnable — safe to call again after editing a category; a passing result marks
+        the draft 'finalized', anything else leaves it 'in_progress' so render_report keeps
+        refusing to run. Requires meta, master_list, and introduction to already be set.
+        Returns {"status": "pass", "checked_at": ISO timestamp} or {"status": "fail",
+        "issues": [{path, message}], "checked_at": ISO timestamp}, or {"error": {...}} if
+        the draft doesn't exist yet or is missing a prerequisite field."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        if draft is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": f"no draft for period_label={period_label!r} draft_slug={draft_slug!r}; call start_report first",
+                }
+            }
+        missing = [f for f in ("meta", "master_list", "introduction") if not draft.get(f)]
+        if missing:
+            return {
+                "error": {
+                    "type": "incomplete_draft",
+                    "message": f"missing required field(s) before finalize_report can run: {missing}",
+                }
+            }
+        checked_at = datetime.now(timezone.utc).isoformat()
+        try:
+            validate_report(_assemble_report_json(draft))
+            result = {"status": "pass", "checked_at": checked_at}
+        except ReportValidationError as e:
+            result = {"status": "fail", "issues": e.issues, "checked_at": checked_at}
+        await drafts.set_finalize_result(period_label, draft_slug, result)
+        return result
+
+    @mcp.tool()
+    async def render_report(
+        period_label: str,
+        glossary: list[dict],
+        disclaimer: str,
+        draft_slug: str = "primary",
+    ) -> dict:
+        """Render the PDF from a finalized draft. Refuses to run unless the draft's status
+        is "finalized" — call finalize_report first; any edit to a category resets status
+        back to in_progress, so a stale "locked" verdict can never reach this tool.
+        glossary/disclaimer are supplied here (Phase D static boilerplate), not stored on
+        the draft. Returns {pdf_url, filename, bytes, page_count} on success (also recorded
+        on the draft row), or {"error": {...}} if the draft isn't finalized or the fully
+        assembled payload still fails validation."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        if draft is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": f"no draft for period_label={period_label!r} draft_slug={draft_slug!r}",
+                }
+            }
+        if draft["status"] != "finalized":
+            return {
+                "error": {
+                    "type": "not_finalized",
+                    "message": f"draft status is {draft['status']!r}, not 'finalized' — call finalize_report first",
+                }
+            }
+        report_json = _assemble_report_json(draft, glossary=glossary, disclaimer=disclaimer)
+        try:
+            validate_report(report_json)
+        except ReportValidationError as e:
+            return e.to_dict()
+        pdf_fn = modal.Function.from_name("CMR-PDF", "generate_pdf")
+        result = pdf_fn.remote(report_json)
+        if "pdf_url" in result:
+            await drafts.set_pdf_url(period_label, draft_slug, result["pdf_url"])
+        return result
+
+    @mcp.tool()
+    async def list_drafts(period_label: str) -> list[dict]:
+        """List every draft version for a period (discoverability across draft_slug
+        versions), newest-updated first. Never used to auto-resolve which draft to act
+        on — that choice is always an explicit draft_slug parameter to the other tools;
+        surface this list to the operator when it's ambiguous which draft they mean."""
+        return await drafts.list_drafts(period_label)
 
     token = os.environ["FINANCE_MCP_TOKEN"]
     return create_streamable_http_app(
