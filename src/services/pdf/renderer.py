@@ -28,6 +28,18 @@ def _pct(value: float | None) -> str:
     return f"{value:,.1f}%"
 
 
+def _paragraphs(value: str, cls: str = "") -> "markupsafe.Markup":
+    """Split body text on blank lines into <p> blocks so multi-paragraph
+    sections and the disclaimer keep their breaks in the PDF."""
+    import markupsafe
+
+    attr = f' class="{cls}"' if cls else ""
+    parts = [p.strip() for p in value.split("\n\n") if p.strip()]
+    return markupsafe.Markup(
+        "".join(f"<p{attr}>{markupsafe.escape(p)}</p>" for p in parts)
+    )
+
+
 def _build_env() -> Environment:
     env = Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
@@ -35,6 +47,7 @@ def _build_env() -> Environment:
     )
     env.filters["money"] = _money
     env.filters["pct"] = _pct
+    env.filters["paragraphs"] = _paragraphs
     return env
 
 

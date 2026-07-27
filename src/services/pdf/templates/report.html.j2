@@ -32,7 +32,7 @@
 <section class="intro">
   {% for s in report.introduction.sections %}
   <h3 class="subhead">{{ s.subhead }}</h3>
-  <p>{{ s.body }}</p>
+  {{ s.body | paragraphs }}
   {% endfor %}
 </section>
 
@@ -81,7 +81,7 @@
 
   {% for s in cat.intro.sections %}
   <h3 class="subhead">{{ s.subhead }}</h3>
-  <p>{{ s.body }}</p>
+  {{ s.body | paragraphs }}
   {% endfor %}
 
   {% if cat.chart %}
@@ -153,7 +153,7 @@
   {% for g in report.glossary %}
   <p class="glossary-entry"><b>{{ g.term }}:</b> {{ g.definition }}</p>
   {% endfor %}
-  <p class="disclaimer">{{ report.disclaimer }}</p>
+  {{ report.disclaimer | paragraphs("disclaimer") }}
 </section>
 
 </body>
