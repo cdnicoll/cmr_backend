@@ -159,6 +159,35 @@ def test_orphaned_master_list_entry_rejected(sample):
     assert any("GHOST.V" in i["message"] for i in exc.value.issues)
 
 
+def test_unclassified_master_list_row_needs_no_category_entry(sample):
+    """Unclassified rows are master-list-only by contract (issue #19): a
+    non-mining constituent keeps its rank with no category section, and the
+    completeness check must not flag it as orphaned."""
+    edition = copy.deepcopy(sample)
+    edition["master_list"].append(
+        {"rank": 3, "company": "Non Mining Co", "ticker": "NMC.V", "category": "Unclassified", "market_cap_cad_mn": 1.0}
+    )
+    report = validate_report(edition)
+    assert {m.ticker for m in report.master_list} == {"AUMB.V", "OMG.V", "NMC.V"}
+
+
+def test_unclassified_master_list_row_still_subject_to_other_checks(sample):
+    """The exemption is only from the orphan check — a duplicated Unclassified
+    ticker or a rank gap must still fail."""
+    bad = copy.deepcopy(sample)
+    bad["master_list"].append(
+        {"rank": 3, "company": "Non Mining Co", "ticker": "NMC.V", "category": "Unclassified", "market_cap_cad_mn": 1.0}
+    )
+    bad["master_list"].append(
+        {"rank": 5, "company": "Non Mining Co", "ticker": "NMC.V", "category": "Unclassified", "market_cap_cad_mn": 1.0}
+    )
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    messages = [i["message"] for i in exc.value.issues]
+    assert any("duplicate ticker(s) in master_list" in m for m in messages)
+    assert any("contiguous" in m for m in messages)
+
+
 def test_orphaned_category_entry_rejected(sample):
     """A category has a company with no corresponding master_list row."""
     bad = copy.deepcopy(sample)

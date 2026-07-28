@@ -151,7 +151,8 @@ class Report(BaseModel):
         limited_activity entries (issue #2): every master_list row must have exactly
         one matching entry across categories (by ticker — company/name fields differ
         between MasterListEntry and Company/LimitedActivityEntry, so ticker is the
-        only reliable join key), no ticker may repeat anywhere in the payload, and
+        only reliable join key; Unclassified rows are exempt, being master-list-only
+        by contract), no ticker may repeat anywhere in the payload, and
         ranks must be contiguous starting at 1. This is what closes the 2026-07-26
         truncated-payload gap: a partial payload (missing categories, duplicate
         tail rows) must fail here instead of rendering a confident wrong PDF.
@@ -181,7 +182,13 @@ class Report(BaseModel):
                 master_ticker_counts.get(entry.ticker, 0) + 1
             )
             ranks.append(entry.rank)
-            if entry.ticker not in category_ticker_counts:
+            # Unclassified rows are master-list-only by contract: non-mining
+            # constituents of the source list keep their rank but get no
+            # category section (agents/main.md Phase 1, per Travis).
+            if (
+                entry.ticker not in category_ticker_counts
+                and entry.category != "Unclassified"
+            ):
                 issues.append(
                     f"master_list rank {entry.rank} ({entry.ticker}) has no matching "
                     "company or limited_activity entry in categories"
