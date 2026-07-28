@@ -137,6 +137,40 @@ class GlossaryEntry(BaseModel):
     definition: str
 
 
+def check_master_list_integrity(entries: list[MasterListEntry]) -> list[str]:
+    """Mechanical checks on master_list alone: duplicate tickers, non-contiguous
+    ranks, and market cap not sorted descending. Shared by set_master_list (Phase 1,
+    checked at write time, before Checkpoint 1 ever presents the list) and Report's
+    full-payload validator (Phase 3's finalize_report) so both stages enforce the
+    same rule instead of Checkpoint 1 resting on the agent's own prose self-check
+    (2026-07-28 Billy report: duplicate VIPR.V and an inverted market-cap sort both
+    survived to Checkpoint 1 because nothing actually checked master_list before it
+    was presented as verified)."""
+    issues: list[str] = []
+
+    ticker_counts: dict[str, int] = {}
+    for entry in entries:
+        ticker_counts[entry.ticker] = ticker_counts.get(entry.ticker, 0) + 1
+    duplicates = sorted(ticker for ticker, count in ticker_counts.items() if count > 1)
+    if duplicates:
+        issues.append(f"duplicate ticker(s) in master_list: {duplicates}")
+
+    ranks = sorted(entry.rank for entry in entries)
+    if ranks != list(range(1, len(ranks) + 1)):
+        issues.append(f"master_list ranks must be contiguous starting at 1; got {ranks}")
+
+    by_rank = sorted(entries, key=lambda e: e.rank)
+    for prev, curr in zip(by_rank, by_rank[1:]):
+        if curr.market_cap_cad_mn > prev.market_cap_cad_mn:
+            issues.append(
+                "master_list not sorted by market_cap_cad_mn descending: rank "
+                f"{curr.rank} ({curr.ticker}, {curr.market_cap_cad_mn}) exceeds rank "
+                f"{prev.rank} ({prev.ticker}, {prev.market_cap_cad_mn})"
+            )
+
+    return issues
+
+
 class Report(BaseModel):
     meta: Meta
     introduction: Introduction
@@ -152,12 +186,14 @@ class Report(BaseModel):
         one matching entry across categories (by ticker — company/name fields differ
         between MasterListEntry and Company/LimitedActivityEntry, so ticker is the
         only reliable join key; Unclassified rows are exempt, being master-list-only
-        by contract), no ticker may repeat anywhere in the payload, and
-        ranks must be contiguous starting at 1. This is what closes the 2026-07-26
-        truncated-payload gap: a partial payload (missing categories, duplicate
-        tail rows) must fail here instead of rendering a confident wrong PDF.
-        Collects every violation before raising, so a bad payload is diagnosed in
-        one round-trip instead of one error at a time."""
+        by contract), no ticker may repeat anywhere in the payload, ranks must be
+        contiguous starting at 1, and market_cap_cad_mn must be sorted descending
+        (delegated to check_master_list_integrity, shared with set_master_list's
+        write-time check). This is what closes the 2026-07-26 truncated-payload gap:
+        a partial payload (missing categories, duplicate tail rows) must fail here
+        instead of rendering a confident wrong PDF. Collects every violation before
+        raising, so a bad payload is diagnosed in one round-trip instead of one error
+        at a time."""
         issues: list[str] = []
 
         category_ticker_counts: dict[str, int] = {}
@@ -175,13 +211,8 @@ class Report(BaseModel):
                 f"duplicate ticker(s) across categories: {duplicate_category_tickers}"
             )
 
-        master_ticker_counts: dict[str, int] = {}
-        ranks: list[int] = []
+        master_tickers = {entry.ticker for entry in self.master_list}
         for entry in self.master_list:
-            master_ticker_counts[entry.ticker] = (
-                master_ticker_counts.get(entry.ticker, 0) + 1
-            )
-            ranks.append(entry.rank)
             # Unclassified rows are master-list-only by contract: non-mining
             # constituents of the source list keep their rank but get no
             # category section (agents/main.md Phase 1, per Travis).
@@ -194,26 +225,14 @@ class Report(BaseModel):
                     "company or limited_activity entry in categories"
                 )
 
-        duplicate_master_tickers = sorted(
-            ticker for ticker, count in master_ticker_counts.items() if count > 1
-        )
-        if duplicate_master_tickers:
-            issues.append(f"duplicate ticker(s) in master_list: {duplicate_master_tickers}")
-
-        orphaned_category_tickers = sorted(
-            set(category_ticker_counts) - set(master_ticker_counts)
-        )
+        orphaned_category_tickers = sorted(set(category_ticker_counts) - master_tickers)
         if orphaned_category_tickers:
             issues.append(
                 "categories contain ticker(s) with no master_list entry: "
                 f"{orphaned_category_tickers}"
             )
 
-        sorted_ranks = sorted(ranks)
-        if sorted_ranks != list(range(1, len(sorted_ranks) + 1)):
-            issues.append(
-                f"master_list ranks must be contiguous starting at 1; got {sorted_ranks}"
-            )
+        issues.extend(check_master_list_integrity(self.master_list))
 
         if issues:
             raise ValueError("; ".join(issues))

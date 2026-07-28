@@ -7,7 +7,7 @@ import pytest
 from src.services.pdf import render_html, validate_report
 from src.services.pdf.charts import render_chart_svg
 from src.services.pdf.renderer import period_slug
-from src.services.pdf.schema import ReportValidationError
+from src.services.pdf.schema import MasterListEntry, ReportValidationError, check_master_list_integrity
 
 SAMPLE_PATH = Path(__file__).resolve().parents[2] / "src/services/pdf/sample_report.json"
 
@@ -208,6 +208,21 @@ def test_non_contiguous_ranks_rejected(sample):
     assert any("contiguous" in i["message"] for i in exc.value.issues)
 
 
+def test_master_list_sort_order_violation_rejected(sample):
+    """2026-07-28 Billy report: this ordering bug (a lower market cap ranked
+    ahead of a higher one) survived to the operator because nothing checked
+    master_list's sort order at all before this fix — not here, not at
+    set_master_list write time."""
+    bad = copy.deepcopy(sample)
+    bad["master_list"][0]["market_cap_cad_mn"], bad["master_list"][1]["market_cap_cad_mn"] = (
+        bad["master_list"][1]["market_cap_cad_mn"],
+        bad["master_list"][0]["market_cap_cad_mn"],
+    )
+    with pytest.raises(ReportValidationError) as exc:
+        validate_report(bad)
+    assert any("not sorted by market_cap_cad_mn descending" in i["message"] for i in exc.value.issues)
+
+
 def test_duplicate_ticker_across_categories_rejected(sample):
     """The 07-26 degradation signature: a duplicate company row appended near
     the end of a category's companies list."""
@@ -288,3 +303,69 @@ def test_render_pdf_full_51_company_edition(sample):
     assert rendered.pdf_bytes.startswith(b"%PDF")
     # 6 category sections of 8-9 companies each: well past the single-category sample
     assert rendered.page_count >= 12
+
+
+# check_master_list_integrity: the standalone function set_master_list runs at
+# write time (modal_mcp_finance.py), reproducing the exact 2026-07-28 Billy
+# report scenario -- a duplicate Silver Viper (VIPR.V) row at ranks 47 and 50,
+# and Amarc ($223.1M) ranked below Vizsla Royalties ($221.7M).
+
+
+def _entry(rank: int, ticker: str, market_cap_cad_mn: float, category: str = "Gold") -> MasterListEntry:
+    return MasterListEntry(
+        rank=rank, company=ticker, ticker=ticker, category=category, market_cap_cad_mn=market_cap_cad_mn
+    )
+
+
+def test_check_master_list_integrity_clean_list_has_no_issues():
+    entries = [_entry(1, "OMG.V", 1621.0), _entry(2, "BZ.V", 1238.6), _entry(3, "NCX.V", 1079.2)]
+    assert check_master_list_integrity(entries) == []
+
+
+def test_check_master_list_integrity_catches_duplicate_ticker():
+    entries = [
+        _entry(rank, f"CO{rank}.V", 300.0 - rank) for rank in range(1, 47)
+    ] + [
+        _entry(47, "VIPR.V", 46.7, category="Silver"),
+        _entry(48, "NAU.V", 40.0),
+        _entry(49, "SAG.V", 39.0),
+        _entry(50, "VIPR.V", 46.7, category="Silver"),
+    ]
+    issues = check_master_list_integrity(entries)
+    assert any("duplicate ticker(s) in master_list" in i and "VIPR.V" in i for i in issues)
+
+
+def test_check_master_list_integrity_catches_sort_violation():
+    entries = [
+        _entry(1, "AAA.V", 1000.0),
+        _entry(2, "AMX.V", 223.1, category="Copper & Base Metals"),
+        _entry(3, "VZL.V", 221.7, category="Royalty & Streaming"),
+    ]
+    # Amarc (223.1) correctly outranks Vizsla Royalties (221.7) here -- now invert it
+    entries[1], entries[2] = (
+        _entry(2, "VZL.V", 221.7, category="Royalty & Streaming"),
+        _entry(3, "AMX.V", 223.1, category="Copper & Base Metals"),
+    )
+    issues = check_master_list_integrity(entries)
+    assert any("not sorted by market_cap_cad_mn descending" in i for i in issues)
+
+
+def test_check_master_list_integrity_catches_non_contiguous_ranks():
+    entries = [_entry(1, "OMG.V", 1621.0), _entry(3, "BZ.V", 1238.6)]
+    issues = check_master_list_integrity(entries)
+    assert any("contiguous" in i for i in issues)
+
+
+def test_check_master_list_integrity_collects_every_violation_at_once():
+    """Duplicate, gap, and sort violation together -- all three surface in one
+    call, matching finalize_report's existing 'diagnose in one round-trip'
+    design rather than requiring three separate fix-and-retry cycles."""
+    entries = [
+        _entry(1, "AAA.V", 100.0),
+        _entry(1, "BBB.V", 200.0),  # duplicate rank, and out of order vs AAA.V
+        _entry(4, "AAA.V", 100.0),  # duplicate ticker, non-contiguous rank
+    ]
+    issues = check_master_list_integrity(entries)
+    assert any("duplicate ticker(s) in master_list" in i for i in issues)
+    assert any("contiguous" in i for i in issues)
+    assert any("not sorted by market_cap_cad_mn descending" in i for i in issues)

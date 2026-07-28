@@ -75,7 +75,14 @@ def serve():
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
-    from src.services.pdf.schema import ReportValidationError, validate_report
+    from pydantic import ValidationError
+
+    from src.services.pdf.schema import (
+        MasterListEntry,
+        ReportValidationError,
+        check_master_list_integrity,
+        validate_report,
+    )
     from src.services.supabase import tsxv50_report_drafts_dao as drafts
 
     def _decode_jsonb(value):
@@ -331,7 +338,34 @@ def serve():
     ) -> dict:
         """Write Phase A's ranked master list (orchestrator only). Each entry:
         {rank, company, ticker, category, market_cap_cad_mn}, ranks contiguous from 1.
-        Returns the updated draft row."""
+        Validates the list before writing: duplicate tickers, non-contiguous ranks, and
+        market cap not sorted descending all fail here with {"error": {"type":
+        "validation_error", "issues": [...]}} and nothing is persisted — a bad list can
+        never reach Checkpoint 1 as an already-"verified" pass. (Added after the
+        2026-07-28 report: this check didn't exist before, so a duplicate ticker and an
+        inverted market-cap sort both survived undetected to the operator, because the
+        only real check on master_list ran inside finalize_report, in Phase 3, long after
+        Checkpoint 1 had already presented the list as PASS.) On failure, recompute the
+        sort/dedup and retry — do not patch a single inversion found by hand.
+        Returns the updated draft row on success."""
+        try:
+            entries = [MasterListEntry.model_validate(entry) for entry in master_list]
+        except ValidationError as e:
+            issues = [
+                {"path": ".".join(str(loc) for loc in err["loc"]), "message": err["msg"]}
+                for err in e.errors()
+            ]
+            return {"error": {"type": "validation_error", "issues": issues}}
+        integrity_issues = check_master_list_integrity(entries)
+        if integrity_issues:
+            return {
+                "error": {
+                    "type": "validation_error",
+                    "issues": [
+                        {"path": "master_list", "message": issue} for issue in integrity_issues
+                    ],
+                }
+            }
         return await drafts.set_master_list(period_label, draft_slug, master_list)
 
     @mcp.tool()
