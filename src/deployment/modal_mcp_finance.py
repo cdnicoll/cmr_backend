@@ -105,6 +105,11 @@ def serve():
         return symbols, []
 
     TSXV50, TSXV50_ENTRIES = asyncio.run(_load_tsxv50())
+    # Fallback for Yahoo responses with real price/cap data but a missing
+    # longName (e.g. VROY.V) -- the watchlist's own name is a reliable
+    # substitute so a company is never silently dropped over a name lookup
+    # gap alone (2026-07-28: this nearly re-dropped Vizsla Royalties).
+    TSXV50_NAMES = {entry["symbol"]: entry["name"] for entry in TSXV50_ENTRIES if entry.get("name")}
 
     class BearerAuthMiddleware(BaseHTTPMiddleware):
         def __init__(self, app, token: str):
@@ -136,9 +141,11 @@ def serve():
 
         Yahoo intermittently returns an info payload with null price fields
         (no exception raised) — one such blip put a null price_cad into a
-        render payload and blocked a PDF. Retry on exceptions AND on missing
-        essential fields; return whatever the last attempt produced so truly
-        dead symbols still come back (empty) rather than erroring the batch.
+        render payload and blocked a PDF. Same class of blip can leave
+        longName null while price/market cap come through fine (2026-07-28:
+        VROY.V) — retry on exceptions AND on any of these missing essential
+        fields; return whatever the last attempt produced so truly dead
+        symbols still come back (empty) rather than erroring the batch.
         """
         last_exc: Exception | None = None
         info: dict = {}
@@ -151,7 +158,11 @@ def serve():
             except Exception as e:
                 last_exc = e
                 continue
-            if info.get("currentPrice") is not None and info.get("marketCap") is not None:
+            if (
+                info.get("currentPrice") is not None
+                and info.get("marketCap") is not None
+                and info.get("longName") is not None
+            ):
                 return info
         if last_exc is not None:
             raise last_exc
@@ -178,7 +189,7 @@ def serve():
                 info = _ticker_info_with_retry(symbol)
                 results.append({
                     "symbol": symbol,
-                    "name": info.get("longName"),
+                    "name": info.get("longName") or TSXV50_NAMES.get(symbol),
                     "currency": info.get("currency"),
                     "current_price": info.get("currentPrice"),
                     "previous_close": info.get("previousClose"),
@@ -235,7 +246,7 @@ def serve():
                 info = _ticker_info_with_retry(symbol)
                 summary = {
                     "symbol": symbol,
-                    "name": info.get("longName"),
+                    "name": info.get("longName") or TSXV50_NAMES.get(symbol),
                     "currency": info.get("currency"),
                     "current_price": info.get("currentPrice"),
                     "market_cap": info.get("marketCap"),
