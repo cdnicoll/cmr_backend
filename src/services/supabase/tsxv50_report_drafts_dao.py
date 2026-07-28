@@ -136,7 +136,14 @@ async def set_meta(period_label: str, draft_slug: str, meta: dict) -> dict | Non
 
 
 async def set_master_list(period_label: str, draft_slug: str, master_list: list[dict]) -> dict | None:
-    """Write Phase A's master list (orchestrator only)."""
+    """Write Phase A's master list (orchestrator only). Clears finalize_result and
+    resets status to in_progress in the same statement -- mirrors upsert_category_content:
+    a stale "locked"/"rendered" verdict must never survive a master_list edit, since a
+    changed master_list can orphan category tickers (a ticker present in a category
+    block but no longer in master_list) that only re-validation would catch. Found
+    2026-07-28: an editorial-review master_list edit left status='rendered' and a
+    passing finalize_result untouched for hours after the edit, even though the
+    edited draft no longer matched what was actually rendered."""
     db_url = load_settings().transaction_pooler_url
     async with asyncpg.create_pool(
         db_url, min_size=1, max_size=5, statement_cache_size=0
@@ -145,7 +152,7 @@ async def set_master_list(period_label: str, draft_slug: str, master_list: list[
             row = await conn.fetchrow(
                 f"""
                 UPDATE public.tsxv50_report_drafts
-                SET master_list = $3, updated_at = now()
+                SET master_list = $3, finalize_result = NULL, status = 'in_progress', updated_at = now()
                 WHERE period_label = $1 AND draft_slug = $2
                 RETURNING {_COLUMNS}
                 """,

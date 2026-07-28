@@ -358,6 +358,10 @@ def serve():
         only real check on master_list ran inside finalize_report, in Phase 3, long after
         Checkpoint 1 had already presented the list as PASS.) On failure, recompute the
         sort/dedup and retry — do not patch a single inversion found by hand.
+        On success, also clears finalize_result and resets status to in_progress, the
+        same cascade-invalidation add_category already does — a master_list edit after
+        finalization can orphan category tickers, so a stale "finalized"/"rendered"
+        verdict must never survive it. Call finalize_report again before any render.
         Returns the updated draft row on success."""
         try:
             entries = [MasterListEntry.model_validate(entry) for entry in master_list]
