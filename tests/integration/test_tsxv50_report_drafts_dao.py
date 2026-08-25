@@ -13,6 +13,7 @@ matching the rest of this project's test suite (no other test exercises the
 async DAOs, so there's no existing async-test convention to follow).
 """
 import asyncio
+import json
 import os
 import uuid
 
@@ -190,3 +191,82 @@ def test_list_drafts_returns_every_version(period_label):
 
     versions = asyncio.run(scenario())
     assert {v["draft_slug"] for v in versions} == {"primary", "editorial-a", "editorial-b"}
+
+
+def test_list_periods_indexes_the_row_without_its_payload(period_label):
+    """list_periods is the cross-period index a follow-up report uses to find its
+    baseline. It runs raw SQL over jsonb whose shape varies (master_list may be
+    absent, categories may be empty), so the point of exercising it against a real
+    database is that the CASE guards hold and the counts are right."""
+
+    async def scenario():
+        await drafts.get_or_create_draft(period_label, "primary")
+        await drafts.set_meta(
+            period_label,
+            "primary",
+            {"period_label": "Q2 2026", "data_as_of": "2026-07-28"},
+        )
+        await drafts.set_master_list(
+            period_label,
+            "primary",
+            [
+                {
+                    "rank": 1,
+                    "company": "Alpha",
+                    "ticker": "AAA.V",
+                    "category": "Gold",
+                    "market_cap_cad_mn": 900.0,
+                },
+                {
+                    "rank": 2,
+                    "company": "Beta",
+                    "ticker": "BBB.V",
+                    "category": "Silver",
+                    "market_cap_cad_mn": 400.0,
+                },
+            ],
+        )
+        await drafts.upsert_category_research(period_label, "primary", "Gold", {"story": "s"})
+        # A second, untouched draft for the same period: no meta, no master_list.
+        # Its counts must come back 0 rather than erroring on null jsonb.
+        await drafts.get_or_create_draft(period_label, "editorial-a")
+        return await drafts.list_periods()
+
+    rows = {(r["period_label"], r["draft_slug"]): r for r in asyncio.run(scenario())}
+
+    primary = rows[(period_label, "primary")]
+    assert primary["period_display"] == "Q2 2026"
+    assert primary["data_as_of"] == "2026-07-28"
+    assert primary["company_count"] == 2
+    assert primary["category_count"] == 1
+    assert primary["has_pdf"] is False
+
+    empty = rows[(period_label, "editorial-a")]
+    assert empty["company_count"] == 0
+    assert empty["category_count"] == 0
+    assert empty["period_display"] is None
+
+
+def test_get_baseline_reads_back_research_without_content(period_label):
+    """The round trip the monthly flow actually depends on: write research and
+    drafted content, then read the baseline back and get only the research."""
+
+    async def scenario():
+        await drafts.get_or_create_draft(period_label, "primary")
+        await drafts.upsert_category_research(
+            period_label, "primary", "Gold", {"AAA.V": {"current_story": {"status": "advanced"}}}
+        )
+        await drafts.upsert_category_content(
+            period_label, "primary", "Gold", {"companies": ["drafted prose here"]}, []
+        )
+        index = await drafts.get_baseline(period_label)
+        gold = await drafts.get_baseline(period_label, category="Gold")
+        return index, gold
+
+    index, gold = asyncio.run(scenario())
+
+    assert index["categories"]["Gold"]["research_chars"] > 0
+    assert index["categories"]["Gold"]["content_chars"] > 0
+    assert gold["category_found"] is True
+    assert gold["research"]["AAA.V"]["current_story"]["status"] == "advanced"
+    assert "drafted prose here" not in json.dumps(gold)
