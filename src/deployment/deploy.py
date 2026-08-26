@@ -182,11 +182,33 @@ def main() -> None:
     deploy_env = os.environ.copy()
     deploy_env["ENVIRONMENT"] = env
 
+    # Apps this script deploys. Trimmed 2026-08-25 when the stack moved to a new
+    # Modal workspace; uncomment a line to bring one back.
+    #
+    #   modal_workers.py (CMR-develop) — run_discovery on a 6h schedule and
+    #     run_recovery_pipeline on a 2h schedule. These feed the content
+    #     discovery pipeline and the Neo4j graph, both being sunset. Deploying
+    #     it starts those schedules, and the previous workspace's copies are
+    #     still running against the same Supabase database, so two sets would
+    #     process concurrently. Do not re-enable without stopping those first.
+    #
+    #   modal_app.py (CMR-API-develop) — the only live routes are the tsxv50
+    #     snapshot GET/POST, which the tsxv50-refresh skill uses as its fallback
+    #     when it has no local repo access; its primary path is
+    #     scripts/refresh_snapshot.py via the DAO. No schedule, and an idle ASGI
+    #     app scales to zero, so re-enabling costs almost nothing if that
+    #     fallback is wanted again. The skill's documented base URL points at the
+    #     old workspace and would need updating too.
+    apps = [
+        "src/deployment/modal_pdf.py",
+        "src/deployment/modal_mcp_finance.py",
+        # "src/deployment/modal_app.py",
+        # "src/deployment/modal_workers.py",
+    ]
+
     if env in ("develop", "production"):
-        subprocess.run([*deploy_args, "src/deployment/modal_app.py"], check=True, env=deploy_env)
-        subprocess.run([*deploy_args, "src/deployment/modal_workers.py"], check=True, env=deploy_env)
-        subprocess.run([*deploy_args, "src/deployment/modal_pdf.py"], check=True, env=deploy_env)
-        subprocess.run([*deploy_args, "src/deployment/modal_mcp_finance.py"], check=True, env=deploy_env)
+        for app_file in apps:
+            subprocess.run([*deploy_args, app_file], check=True, env=deploy_env)
     else:
         print(f"Unknown environment: {env}")
         sys.exit(1)
