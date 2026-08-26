@@ -48,6 +48,12 @@ image = (
 @app.function(
     image=image,
     keep_warm=1,
+    # Canadian data residency: CMR report drafts, company research and generated
+    # prose all pass through this container, and the client requires Canadian
+    # processing (the Supabase project is deliberately ca-central-1 for the same
+    # reason). "ca" is Modal's broad Canada region; pinning carries a usage-price
+    # multiplier, accepted deliberately. Added 2026-08-25 with the workspace move.
+    region="ca",
     secrets=[
         modal.Secret.from_name("finance-mcp-credentials"),
         # The report-draft tools' DAO uses load_settings() (src/models/config.py),

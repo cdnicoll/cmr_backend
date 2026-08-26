@@ -39,7 +39,9 @@ secrets = [
 ]
 
 
-@app.function(image=image, timeout=300, secrets=secrets)
+# region="ca" for Canadian data residency: the rendered report and its
+# company data pass through here before upload. See modal_mcp_finance.py.
+@app.function(image=image, timeout=300, secrets=secrets, region="ca")
 def generate_pdf(report_json: dict) -> dict:
     """Render + upload; returns the tool contract or a structured validation error."""
     from src.services.pdf import ReportValidationError, generate_tsxv50_pdf
