@@ -47,7 +47,7 @@ image = (
 
 @app.function(
     image=image,
-    keep_warm=1,
+    min_containers=1,
     # Canadian data residency: CMR report drafts, company research and generated
     # prose all pass through this container, and the client requires Canadian
     # processing (the Supabase project is deliberately ca-central-1 for the same
