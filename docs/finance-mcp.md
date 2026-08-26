@@ -5,7 +5,10 @@ A Modal-hosted MCP server that exposes TSX Venture Exchange stock data to Claude
 ## Overview
 
 - **App name**: `CMR-Finance-MCP`
-- **Modal workspace**: `canadain-mining-report` / environment: `main`
+- **Modal workspace**: `canadian-mining-report` / environment: `main`
+  (migrated 2026-08-25 from `canadain-mining-report`, which was tied to an
+  Ocupop identity that is no longer accessible; that deployment still runs but
+  can no longer be redeployed or rotated)
 - **MCP server name** (in `.mcp.json`): `cmr-stock-ticker`
 - **Transport**: Streamable HTTP (`POST /mcp`)
 - **Auth**: Bearer token (`FINANCE_MCP_TOKEN`)
@@ -81,11 +84,11 @@ FINANCE_MCP_TOKEN=<generated-token>
 
 ### 2. Deploy
 
-Ensure the `canadain-mining-report` Modal profile is active:
+Ensure the `canadian-mining-report` Modal profile is active:
 
 ```bash
-modal profile list        # confirm • is on canadain-mining-report
-modal profile activate canadain-mining-report  # if not active
+modal profile list        # confirm • is on canadian-mining-report
+modal profile activate canadian-mining-report  # if not active
 ```
 
 Deploy via the project deploy script (deploys all three Modal apps):
@@ -107,7 +110,7 @@ After deploying, Modal prints the endpoint URL. Update `.mcp.json`:
 ```json
 "cmr-stock-ticker": {
   "type": "http",
-  "url": "https://canadain-mining-report--cmr-finance-mcp-serve.modal.run/mcp",
+  "url": "https://canadian-mining-report--cmr-finance-mcp-serve.modal.run/mcp",
   "headers": {
     "Authorization": "Bearer <your-FINANCE_MCP_TOKEN>"
   }
