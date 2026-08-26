@@ -429,10 +429,19 @@ def serve():
         period_label: str,
         category: str,
         content: dict,
-        sources: list[dict] | None = None,
+        sources: list[dict] = [],  # noqa: B006 - see note below
         draft_slug: str = "primary",
     ) -> dict:
-        """Write one category's drafted content (category-drafter). content must match the
+        """Write one category's drafted content (category-drafter).
+
+        `sources` is typed as a plain list rather than `list[dict] | None` on purpose. The
+        server's own schema for a union is correct (`anyOf: [array, null]`), but some MCP
+        clients flatten the union away and then serialize the value as a string, which the
+        server rejects as `list_type`. Every category drafted in the 2026-08-25 test run lost
+        its sources that way. A concrete type survives the round trip; the union does not.
+        Same reason get_baseline takes `category: str = ""` rather than `str | None`.
+
+        content must match the
         report_json category shape: {tagline, intro, chart, companies, limited_activity}.
         Idempotent per category name — editing an already-drafted category is the normal
         path, not an exception. Clears any existing finalize_result and resets status to
@@ -564,7 +573,7 @@ def serve():
 
     @mcp.tool()
     async def get_baseline(
-        period_label: str, draft_slug: str = "primary", category: str | None = None
+        period_label: str, draft_slug: str = "primary", category: str = ""
     ) -> dict:
         """Read a previous edition as the baseline for a follow-up report.
 
@@ -581,7 +590,7 @@ def serve():
         re-verifies and re-states its facts; it does not reuse the last edition's
         sentences. Every figure you publish still comes from this run's own tool
         calls — a baseline tells you what was said before, never what is true now."""
-        result = await drafts.get_baseline(period_label, draft_slug, category)
+        result = await drafts.get_baseline(period_label, draft_slug, category or None)
         if result is None:
             return {
                 "error": {
