@@ -83,6 +83,7 @@ def serve():
         check_master_list_integrity,
         validate_report,
     )
+    from src.services.supabase import tsxv50_dao
     from src.services.supabase import tsxv50_report_drafts_dao as drafts
 
     def _decode_jsonb(value):
@@ -529,6 +530,77 @@ def serve():
         on — that choice is always an explicit draft_slug parameter to the other tools;
         surface this list to the operator when it's ambiguous which draft they mean."""
         return await drafts.list_drafts(period_label)
+
+    @mcp.tool()
+    async def list_periods() -> list[dict]:
+        """List every report draft across every period, newest-updated first — the
+        "what have we published before" index. Use it to find the baseline edition a
+        follow-up report builds on, when the operator hasn't named one outright.
+
+        Returns {period_label, draft_slug, status, period_display, data_as_of,
+        company_count, category_count, has_pdf, updated_at} and no report content;
+        call get_baseline for content.
+
+        Never auto-resolve a baseline from this list. Surface it to the operator and
+        let them pick, the same rule that governs list_drafts."""
+        return await drafts.list_periods()
+
+    @mcp.tool()
+    async def get_baseline(
+        period_label: str, draft_slug: str = "primary", category: str | None = None
+    ) -> dict:
+        """Read a previous edition as the baseline for a follow-up report.
+
+        Without `category`: that edition's meta, master_list and synthesis, plus a
+        per-category index carrying the size of each stored block — so you can pull
+        research a few categories at a time instead of hauling a whole edition into
+        one turn.
+
+        With `category`: only that category's stored research, which is where the
+        current-story blocks, their statuses and the next-expected-catalyst dates
+        live. That is what a follow-up reports movement against.
+
+        Drafted prose is never returned by this tool, in either mode. A follow-up
+        re-verifies and re-states its facts; it does not reuse the last edition's
+        sentences. Every figure you publish still comes from this run's own tool
+        calls — a baseline tells you what was said before, never what is true now."""
+        result = await drafts.get_baseline(period_label, draft_slug, category)
+        if result is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": (
+                        f"no draft for period_label={period_label!r} "
+                        f"draft_slug={draft_slug!r}; call list_periods to see what exists"
+                    ),
+                }
+            }
+        return result
+
+    @mcp.tool()
+    async def list_snapshots() -> list[dict]:
+        """List every TSXV 50 watchlist snapshot, newest first: {id, created_at,
+        entry_count, has_entries}. This is the watchlist's membership history — use
+        it to state which companies joined or left the list between two editions with
+        a date behind the claim rather than an impression. Call get_snapshot for the
+        contents of one."""
+        return await tsxv50_dao.list_snapshots()
+
+    @mcp.tool()
+    async def get_snapshot(snapshot_id: int) -> dict:
+        """Read one watchlist snapshot by id: {id, symbols, entries, created_at}.
+        `entries` ({symbol, name, category}) is populated on snapshots taken after the
+        2026-07 entries migration; older rows carry only the legacy `symbols` array,
+        so both fields are returned rather than one normalized field."""
+        snapshot = await tsxv50_dao.get_snapshot(snapshot_id)
+        if snapshot is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": f"no snapshot with id={snapshot_id}; call list_snapshots",
+                }
+            }
+        return snapshot
 
     token = os.environ["FINANCE_MCP_TOKEN"]
     return create_streamable_http_app(

@@ -113,6 +113,153 @@ async def list_drafts(period_label: str) -> list[dict]:
             return [_row_to_dict(row) for row in rows]
 
 
+def _jsonb_chars(value) -> int:
+    """Rough serialized size of one stored block, for the baseline index. Lets a
+    caller decide how many categories to pull per turn instead of discovering the
+    payload ceiling the hard way (2026-07-26)."""
+    if value is None:
+        return 0
+    return len(value if isinstance(value, str) else json.dumps(value, default=str))
+
+
+def _category_index_entry(block) -> dict:
+    """One line of the baseline's per-category index: what state that category is in
+    and how big its stored blocks are, without returning either block."""
+    if not isinstance(block, dict):
+        return {"status": None, "updated_at": None, "research_chars": 0, "content_chars": 0}
+    return {
+        "status": block.get("status"),
+        "updated_at": block.get("updated_at"),
+        "research_chars": _jsonb_chars(block.get("research")),
+        "content_chars": _jsonb_chars(block.get("content")),
+    }
+
+
+async def list_periods() -> list[dict]:
+    """Index every draft across every period, newest-updated first.
+
+    Deliberately lightweight: no meta, master_list, categories or research payload
+    crosses this boundary, only enough to recognize an edition. The whole point of
+    this read is finding a *previous* edition to build a follow-up against, and
+    returning full rows to do it would walk straight back into the payload ceiling
+    that the draft store exists to avoid.
+
+    Read-only discoverability, same contract as list_drafts: never used to
+    auto-resolve which draft to act on. Which edition is the baseline is always an
+    explicit parameter, chosen by the operator.
+    """
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    d.period_label,
+                    d.draft_slug,
+                    d.status,
+                    d.meta->>'period_label' AS period_display,
+                    d.meta->>'data_as_of'   AS data_as_of,
+                    CASE
+                        WHEN jsonb_typeof(d.master_list) = 'array'
+                        THEN jsonb_array_length(d.master_list)
+                        ELSE 0
+                    END AS company_count,
+                    CASE
+                        WHEN jsonb_typeof(d.categories) = 'object'
+                        THEN (SELECT count(*) FROM jsonb_object_keys(d.categories))
+                        ELSE 0
+                    END AS category_count,
+                    d.pdf_url IS NOT NULL AS has_pdf,
+                    d.updated_at
+                FROM public.tsxv50_report_drafts d
+                ORDER BY d.updated_at DESC
+                """
+            )
+            return [
+                {
+                    "period_label": row["period_label"],
+                    "draft_slug": row["draft_slug"],
+                    "status": row["status"],
+                    "period_display": row["period_display"],
+                    "data_as_of": row["data_as_of"],
+                    "company_count": row["company_count"],
+                    "category_count": row["category_count"],
+                    "has_pdf": row["has_pdf"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ]
+
+
+async def get_baseline(
+    period_label: str, draft_slug: str = "primary", category: str | None = None
+) -> dict | None:
+    """Read a previous edition as the baseline for a follow-up, without dragging its
+    drafted prose along.
+
+    Without `category`: the edition's meta, master_list and synthesis, plus a
+    per-category index (status, timestamp, block sizes) so a caller can see what is
+    there and pull research in batches.
+
+    With `category`: only that category's stored research — the current-story blocks,
+    statuses and next-expected-catalyst dates a follow-up reports movement against.
+
+    Drafted prose (`content`) is never returned in either mode. A follow-up
+    re-verifies and re-states; it does not copy the last edition's sentences.
+
+    Returns None when the draft doesn't exist. An unknown category comes back with
+    `category_found: False` plus the categories that do exist, rather than an empty
+    result a caller could read as "that category had no research".
+
+    Deliberately shape-agnostic about what is inside `research`: that jsonb is
+    authored by the category-researcher against a prose contract in
+    `agents/category-researcher.md`, not a schema this module owns, so nothing here
+    reaches into its keys.
+    """
+    draft = await get_draft(period_label, draft_slug)
+    if draft is None:
+        return None
+
+    categories = draft.get("categories")
+    if not isinstance(categories, dict):
+        categories = {}
+
+    if category is not None:
+        block = categories.get(category)
+        if not isinstance(block, dict):
+            return {
+                "period_label": draft["period_label"],
+                "draft_slug": draft["draft_slug"],
+                "category": category,
+                "category_found": False,
+                "available_categories": sorted(categories),
+                "research": None,
+            }
+        return {
+            "period_label": draft["period_label"],
+            "draft_slug": draft["draft_slug"],
+            "category": category,
+            "category_found": True,
+            "status": block.get("status"),
+            "updated_at": block.get("updated_at"),
+            "research": block.get("research"),
+        }
+
+    return {
+        "period_label": draft["period_label"],
+        "draft_slug": draft["draft_slug"],
+        "status": draft["status"],
+        "meta": draft["meta"],
+        "master_list": draft["master_list"],
+        "synthesis": draft["synthesis"],
+        "pdf_url": draft["pdf_url"],
+        "updated_at": draft["updated_at"],
+        "categories": {name: _category_index_entry(block) for name, block in categories.items()},
+    }
+
+
 async def set_meta(period_label: str, draft_slug: str, meta: dict) -> dict | None:
     """Write Phase A's meta block (publication, report_title, edition_tagline,
     period_label display string, data_as_of, currency, cover_image)."""
