@@ -193,6 +193,72 @@ async def list_periods() -> list[dict]:
             ]
 
 
+def _company_id(entry) -> str | None:
+    """A company's identifier inside a research object, tolerating both spellings.
+
+    The category-researcher authors this jsonb against a prose contract, and the
+    2026-Q2 edition proves the contract did not pin the key: Royalty & Streaming
+    wrote `ticker`, Copper & Base Metals wrote `symbol`. Anything matching on one
+    spelling alone silently misses half the editions."""
+    if not isinstance(entry, dict):
+        return None
+    return entry.get("ticker") or entry.get("symbol")
+
+
+async def find_baseline_company(
+    period_label: str, ticker: str, draft_slug: str = "primary"
+) -> dict | None:
+    """Find one company's stored research in a baseline edition, wherever it is filed.
+
+    Exists because category membership is not stable between editions and the
+    per-category read misses the difference. In the 2026-Q2 baseline, TALA.V's
+    research sits in the Copper & Base Metals block while the company is Gold in the
+    August master list, so a Gold researcher reading its own category would find no
+    story for the second-largest company on the watchlist and treat it as new
+    coverage. That is the Vizsla failure shape — a live story invisible because of
+    where it was filed rather than whether it exists.
+
+    Returns None only when the draft itself does not exist. A ticker that genuinely
+    has no baseline entry comes back `found: False` with the categories searched, so
+    a caller can tell "not covered last edition" from "looked in the wrong place".
+    """
+    draft = await get_draft(period_label, draft_slug)
+    if draft is None:
+        return None
+
+    categories = draft.get("categories")
+    if not isinstance(categories, dict):
+        categories = {}
+
+    wanted = ticker.strip().upper()
+    for name, block in categories.items():
+        if not isinstance(block, dict):
+            continue
+        research = block.get("research")
+        companies = research.get("companies") if isinstance(research, dict) else None
+        for entry in companies or []:
+            found = _company_id(entry)
+            if found and found.strip().upper() == wanted:
+                return {
+                    "period_label": draft["period_label"],
+                    "draft_slug": draft["draft_slug"],
+                    "ticker": ticker,
+                    "found": True,
+                    "found_in_category": name,
+                    "research": entry,
+                }
+
+    return {
+        "period_label": draft["period_label"],
+        "draft_slug": draft["draft_slug"],
+        "ticker": ticker,
+        "found": False,
+        "found_in_category": None,
+        "searched_categories": sorted(categories),
+        "research": None,
+    }
+
+
 async def get_baseline(
     period_label: str, draft_slug: str = "primary", category: str | None = None
 ) -> dict | None:

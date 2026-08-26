@@ -584,6 +584,37 @@ def serve():
         return result
 
     @mcp.tool()
+    async def find_baseline_company(
+        period_label: str, ticker: str, draft_slug: str = "primary"
+    ) -> dict:
+        """Find one company's research in a baseline edition, wherever it is filed.
+
+        Use this when a company in your category has no entry in that category's
+        baseline research. Category membership is not stable between editions, so a
+        recategorized company's story lives under its OLD category and a per-category
+        read will not find it. In the 2026-Q2 baseline, TALA.V sits in Copper & Base
+        Metals while the company is Gold today — reading only your own category would
+        make the second-largest company on the watchlist look like new coverage.
+
+        Returns {found, found_in_category, research} and tolerates both key spellings
+        ("ticker" and "symbol") used across editions. `found: false` with
+        `searched_categories` means the company genuinely had no baseline entry, which
+        is different from having looked in the wrong place — treat only that as new
+        coverage."""
+        result = await drafts.find_baseline_company(period_label, ticker, draft_slug)
+        if result is None:
+            return {
+                "error": {
+                    "type": "not_found",
+                    "message": (
+                        f"no draft for period_label={period_label!r} "
+                        f"draft_slug={draft_slug!r}; call list_periods to see what exists"
+                    ),
+                }
+            }
+        return result
+
+    @mcp.tool()
     async def list_snapshots() -> list[dict]:
         """List every TSXV 50 watchlist snapshot, newest first: {id, created_at,
         entry_count, has_entries}. This is the watchlist's membership history — use

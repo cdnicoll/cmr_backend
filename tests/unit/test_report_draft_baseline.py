@@ -134,3 +134,48 @@ def test_malformed_category_block_does_not_crash_the_index(monkeypatch):
         "research_chars": 0,
         "content_chars": 0,
     }
+
+
+def test_find_baseline_company_crosses_category_boundaries(monkeypatch):
+    """A recategorized company's story lives under its OLD category. Reading only the
+    new category makes a live story look like no story, which is the Vizsla failure
+    shape. Seeded from the real 2026-Q2 draft, where TALA.V's research sits in the
+    Copper & Base Metals block while the company is Gold in the August master list."""
+    draft = {
+        **DRAFT,
+        "categories": {
+            "Copper & Base Metals": {
+                "status": "drafted",
+                "research": {
+                    # Note the key: this block spells it "symbol", while the Gold block
+                    # below spells it "ticker". Both spellings exist in the real edition.
+                    "companies": [{"symbol": "TALA.V", "current_story": {"status": "advanced"}}]
+                },
+                "content": {"prose": PROSE},
+            },
+            "Gold": {
+                "status": "drafted",
+                "research": {"companies": [{"ticker": "AAA.V"}]},
+                "content": None,
+            },
+        },
+    }
+    _patch_get_draft(monkeypatch, draft)
+
+    hit = asyncio.run(drafts.find_baseline_company("2026-Q2", "TALA.V"))
+    assert hit["found"] is True
+    assert hit["found_in_category"] == "Copper & Base Metals"
+    assert hit["research"]["current_story"]["status"] == "advanced"
+
+    # Case-insensitive, and the other spelling resolves too.
+    assert asyncio.run(drafts.find_baseline_company("2026-Q2", "aaa.v"))["found"] is True
+
+
+def test_find_baseline_company_distinguishes_absent_from_misfiled(monkeypatch):
+    """found: false must mean "genuinely not covered last edition", never "looked in
+    the wrong place" — only the former justifies treating a company as new coverage."""
+    _patch_get_draft(monkeypatch)
+    miss = asyncio.run(drafts.find_baseline_company("2026-Q2", "ZZZ.V"))
+    assert miss["found"] is False
+    assert miss["research"] is None
+    assert miss["searched_categories"] == ["Gold", "Silver"]
