@@ -179,3 +179,28 @@ def test_find_baseline_company_distinguishes_absent_from_misfiled(monkeypatch):
     assert miss["found"] is False
     assert miss["research"] is None
     assert miss["searched_categories"] == ["Gold", "Silver"]
+
+
+def test_category_writes_reject_an_unknown_name():
+    """jsonb_set creates a key for any string, so an escaped or misspelled category
+    silently forks a phantom block. On 2026-08-25 a caller passed the ampersand
+    HTML-escaped and the draft held both "Copper & Base Metals" and
+    "Copper &amp; Base Metals" with the same two companies — invisible until
+    finalize_report reported them as duplicate tickers, a symptom far from its cause."""
+    import pytest
+
+    from src.services.supabase.tsxv50_report_drafts_dao import (
+        InvalidCategoryError,
+        _validate_category,
+    )
+
+    _validate_category("Copper & Base Metals")  # literal ampersand: fine
+
+    with pytest.raises(InvalidCategoryError) as caught:
+        _validate_category("Copper &amp; Base Metals")
+    assert "Copper & Base Metals" in caught.value.valid
+    assert "HTML-escaped" in str(caught.value)
+
+    for bad in ("gold", "Gold ", "Precious Metals", ""):
+        with pytest.raises(InvalidCategoryError):
+            _validate_category(bad)

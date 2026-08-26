@@ -91,6 +91,7 @@ def serve():
     )
     from src.services.supabase import tsxv50_dao
     from src.services.supabase import tsxv50_report_drafts_dao as drafts
+    from src.services.supabase.tsxv50_report_drafts_dao import InvalidCategoryError
 
     def _decode_jsonb(value):
         return json.loads(value) if isinstance(value, str) else value
@@ -409,7 +410,12 @@ def serve():
         other category's research and any already-drafted content untouched. Call this
         once per category; the synthesist requires every category's research to exist
         before it can run. Returns the updated draft row."""
-        return await drafts.upsert_category_research(period_label, draft_slug, category, research)
+        try:
+            return await drafts.upsert_category_research(
+                period_label, draft_slug, category, research
+            )
+        except InvalidCategoryError as e:
+            return {"error": {"type": "invalid_category", "message": str(e), "valid": e.valid}}
 
     @mcp.tool()
     async def set_synthesis(period_label: str, synthesis: dict, draft_slug: str = "primary") -> dict:
@@ -432,7 +438,12 @@ def serve():
         path, not an exception. Clears any existing finalize_result and resets status to
         in_progress: a stale "locked" verdict must never survive an edit. Returns the
         updated draft row."""
-        return await drafts.upsert_category_content(period_label, draft_slug, category, content, sources)
+        try:
+            return await drafts.upsert_category_content(
+                period_label, draft_slug, category, content, sources
+            )
+        except InvalidCategoryError as e:
+            return {"error": {"type": "invalid_category", "message": str(e), "valid": e.valid}}
 
     @mcp.tool()
     async def finalize_report(period_label: str, draft_slug: str = "primary") -> dict:

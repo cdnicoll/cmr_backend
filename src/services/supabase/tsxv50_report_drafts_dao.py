@@ -397,13 +397,47 @@ async def set_introduction(period_label: str, draft_slug: str, introduction: dic
             return _row_to_dict(row) if row else None
 
 
+class InvalidCategoryError(ValueError):
+    """A category write named something that is not one of the eight real categories."""
+
+    def __init__(self, category: str, valid: list[str]):
+        self.category = category
+        self.valid = valid
+        super().__init__(
+            f"unknown category {category!r}; expected one of {valid}. "
+            "Note the ampersand must be literal — an HTML-escaped '&amp;' is a different string."
+        )
+
+
+def _validate_category(category: str) -> None:
+    """Reject a category name that is not one of the eight.
+
+    `jsonb_set` will happily create a key for any string, so before this check an
+    escaped or misspelled name silently created a phantom category. On 2026-08-25 a
+    caller passed the ampersand HTML-escaped and the draft ended up holding both
+    "Copper & Base Metals" and "Copper &amp; Base Metals", each with the same two
+    companies. Nothing surfaced until `finalize_report`, which would have reported
+    them as duplicate tickers — a confusing symptom a long way from the cause.
+
+    Write-time rejection, the same shape as set_master_list's integrity check: a bad
+    value never reaches the row."""
+    from src.services.pdf.schema import Category
+
+    valid = list(Category.__args__)
+    if category not in valid:
+        raise InvalidCategoryError(category, valid)
+
+
 async def _merge_category_field(
     period_label: str, draft_slug: str, category: str, patch: dict, extra_set_sql: str = ""
 ) -> dict | None:
     """Merge `patch` into categories[category] atomically, via jsonb_set + `||`
     against the row's current value in a single statement — safe under concurrent
     per-category writes from parallel subagents, since each UPDATE is atomic
-    per-row and reads the pre-update value of `categories` on its right-hand side."""
+    per-row and reads the pre-update value of `categories` on its right-hand side.
+
+    Rejects an unknown category before touching the row (see _validate_category)."""
+    _validate_category(category)
     db_url = load_settings().transaction_pooler_url
     async with asyncpg.create_pool(
         db_url, min_size=1, max_size=5, statement_cache_size=0
