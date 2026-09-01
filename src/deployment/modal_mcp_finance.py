@@ -47,7 +47,28 @@ image = (
 
 @app.function(
     image=image,
-    min_containers=1,
+    # min_containers=0 since 2026-09-01: no warm container. It was 1, which held a
+    # container up around the clock in a price-multiplied region and exhausted the
+    # workspace's credit balance in six days, against two operator sessions of real
+    # use. Modal disabled the workspace on 2026-09-01, taking this MCP and the PDF
+    # service down together, and Billy's August-update run failed with every tool
+    # unresolvable — the agent fell back to invoking the tsxv50-schema skill because
+    # it was the only thing left that answered.
+    #
+    # The warm container existed to avoid a cold-start race during deploys, where
+    # tools/list advertised a tool that tools/call rejected. That is better handled
+    # by the runbook rule already written for it: deploy through the current CLI,
+    # and call the changed tool before believing it is live. A cold start on the
+    # first call of a report run costs seconds, a handful of times a month.
+    min_containers=0,
+    # Stay up for 10 minutes after the last call. An operator sits at Checkpoint 1
+    # and Checkpoint 2 for minutes at a time, so without this a single report run
+    # pays a cold start at every checkpoint rather than once. librechat.yaml gives
+    # this server a 60s timeout and a cold start here is not free — the module-level
+    # _load_tsxv50() opens a Supabase connection before the server answers anything —
+    # so repeated cold starts inside one run are a real failure risk, not just
+    # latency. Idle overnight still scales to zero, which is where the cost went.
+    scaledown_window=600,
     # Canadian data residency: CMR report drafts, company research and generated
     # prose all pass through this container, and the client requires Canadian
     # processing (the Supabase project is deliberately ca-central-1 for the same
