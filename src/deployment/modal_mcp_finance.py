@@ -84,7 +84,24 @@ image = (
         modal.Secret.from_name("app-config-develop"),
     ],
 )
-@modal.asgi_app()
+# requires_proxy_auth added 2026-09-01. Modal rejects any request without valid
+# Modal-Key / Modal-Secret headers at its own edge, before this container is
+# invoked or even started.
+#
+# The bearer middleware below is not enough on its own. It runs *inside* the
+# container, so every unauthenticated request still costs a container start and
+# billed execution. This endpoint was taking roughly 165,000 OAuth-discovery
+# probes a day (~2/sec, all 401): something scanning for exposed MCP servers,
+# most likely from the URL being published in librechat.yaml while that repo was
+# public until 2026-08-26 — the same leak that exposed the deploy host in
+# cmr_libre_chat 5d59bbc76.
+#
+# That traffic, not the warm container, is what kept this app from ever scaling
+# to zero: min_containers=0 does nothing while requests arrive every half second.
+#
+# Proxy auth is defence in depth, not a replacement — the bearer token stays, so
+# a leaked proxy key alone does not reach the tools.
+@modal.asgi_app(requires_proxy_auth=True)
 def serve():
     import asyncio
     import concurrent.futures
