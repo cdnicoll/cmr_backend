@@ -84,32 +84,27 @@ image = (
         modal.Secret.from_name("app-config-develop"),
     ],
 )
-# PROXY AUTH IS OFF. Two attempts on 2026-09-02 both failed and both took the
-# agent's tools down (~76s and ~48s); rolled back each time.
+# requires_proxy_auth: Modal rejects any request without valid Modal-Key /
+# Modal-Secret headers at its own edge, before this container is invoked or even
+# started. The bearer middleware below stays as the inner door — it runs inside
+# the container, so on its own every unauthenticated probe still cost a
+# container start and billed execution.
 #
-# Why we want it: this endpoint takes roughly 165,000 OAuth-discovery probes a
-# day (~2/sec, all 401) — something scanning for exposed MCP servers, most likely
-# from the URL sitting in librechat.yaml while that repo was public until
-# 2026-08-26, the same leak that exposed the deploy host in cmr_libre_chat
-# 5d59bbc76. BearerAuthMiddleware rejects them, but it runs *inside* the
-# container, so each probe still costs a container start and billed execution.
-# That traffic is what keeps this app awake: min_containers=0 does nothing while
-# requests arrive every half second.
+# This endpoint was taking ~165,000 OAuth-discovery probes a day (~2/sec), all
+# 401, most likely from the URL sitting in librechat.yaml while that repo was
+# public until 2026-08-26. That traffic kept the app awake around the clock —
+# min_containers=0 saved nothing while requests arrived every half second — and
+# is what burned the first credit balance in six days. It also shadowed deploys:
+# the old container never idled out, so new code did not serve until the app was
+# stopped by hand.
 #
-# Why it failed: Modal answered "invalid credentials for proxy authorization" —
-# headers sent, values refused. Ruled out: a truncated secret (found and fixed, 25
-# chars vs the real 28, and it still failed), LibreChat itself, and header naming.
-# A direct curl carrying Modal-Key and Modal-Secret is refused the same way, so
-# the token does not validate against this app at all.
-#
-# Most likely the token belongs to the wrong workspace — this account also has a
-# personal `cdnicoll` workspace and the dashboard opens on whichever was viewed
-# last. Confirm it was minted under `canadian-mining-report`.
-#
-# Do NOT test the next attempt on this app. Deploy a throwaway app with
-# requires_proxy_auth=True, curl it with the token, and only flip this line once
-# that returns 200. Billy loses every tool the moment this is wrong.
-@modal.asgi_app()
+# Enabled 2026-09-02 on the third attempt. The first two failed with "invalid
+# credentials" and were rolled back within ~76s and ~48s. Root cause was on our
+# side: a correct token in one place got overwritten by a wrong one from another
+# during an attempt to "fix" a length mismatch. Proven against a throwaway
+# proxy-auth endpoint before this flip, which is now the rule: never test a
+# credential on the app Billy's tools depend on.
+@modal.asgi_app(requires_proxy_auth=True)
 def serve():
     import asyncio
     import concurrent.futures
