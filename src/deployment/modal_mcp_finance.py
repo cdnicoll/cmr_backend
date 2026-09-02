@@ -84,29 +84,31 @@ image = (
         modal.Secret.from_name("app-config-develop"),
     ],
 )
-# requires_proxy_auth added 2026-09-01. Modal rejects any request without valid
-# Modal-Key / Modal-Secret headers at its own edge, before this container is
-# invoked or even started.
+# PROXY AUTH IS OFF. Two attempts on 2026-09-02 both failed and both took the
+# agent's tools down (~76s and ~48s); rolled back each time.
 #
-# The bearer middleware below is not enough on its own. It runs *inside* the
-# container, so every unauthenticated request still costs a container start and
-# billed execution. This endpoint was taking roughly 165,000 OAuth-discovery
-# probes a day (~2/sec, all 401): something scanning for exposed MCP servers,
-# most likely from the URL being published in librechat.yaml while that repo was
-# public until 2026-08-26 — the same leak that exposed the deploy host in
-# cmr_libre_chat 5d59bbc76.
+# Why we want it: this endpoint takes roughly 165,000 OAuth-discovery probes a
+# day (~2/sec, all 401) — something scanning for exposed MCP servers, most likely
+# from the URL sitting in librechat.yaml while that repo was public until
+# 2026-08-26, the same leak that exposed the deploy host in cmr_libre_chat
+# 5d59bbc76. BearerAuthMiddleware rejects them, but it runs *inside* the
+# container, so each probe still costs a container start and billed execution.
+# That traffic is what keeps this app awake: min_containers=0 does nothing while
+# requests arrive every half second.
 #
-# That traffic, not the warm container, is what kept this app from ever scaling
-# to zero: min_containers=0 does nothing while requests arrive every half second.
+# Why it failed: Modal answered "invalid credentials for proxy authorization" —
+# headers sent, values refused. Ruled out: a truncated secret (found and fixed, 25
+# chars vs the real 28, and it still failed), LibreChat itself, and header naming.
+# A direct curl carrying Modal-Key and Modal-Secret is refused the same way, so
+# the token does not validate against this app at all.
 #
-# Proxy auth is defence in depth, not a replacement — the bearer token stays, so
-# a leaked proxy key alone does not reach the tools.
-# ROLLED BACK 2026-09-02: enabling this rejected LibreChat with "invalid
-# credentials for proxy authorization" — headers were being sent, the values were
-# refused. The token is the right shape (wk-/ws-, 25 chars, unquoted, right
-# order), so the most likely cause is that it was created in the wrong workspace
-# (this account also has a personal `cdnicoll` workspace). Re-enable once the
-# token is confirmed to belong to `canadian-mining-report`.
+# Most likely the token belongs to the wrong workspace — this account also has a
+# personal `cdnicoll` workspace and the dashboard opens on whichever was viewed
+# last. Confirm it was minted under `canadian-mining-report`.
+#
+# Do NOT test the next attempt on this app. Deploy a throwaway app with
+# requires_proxy_auth=True, curl it with the token, and only flip this line once
+# that returns 200. Billy loses every tool the moment this is wrong.
 @modal.asgi_app()
 def serve():
     import asyncio
