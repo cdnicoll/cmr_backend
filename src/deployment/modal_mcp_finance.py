@@ -218,6 +218,13 @@ def serve():
                 info.get("currentPrice") is not None
                 and info.get("marketCap") is not None
                 and info.get("longName") is not None
+                # sector/industry added 2026-09-02: not load-bearing (category
+                # comes from the Supabase snapshot, never from Yahoo), but a
+                # blip here shows up as a "missing sector" flag that varies
+                # between two runs minutes apart, which reads as data drift
+                # to an operator. Same intermittent-null class as longName.
+                and info.get("sector") is not None
+                and info.get("industry") is not None
             ):
                 return info
         if last_exc is not None:
@@ -329,8 +336,14 @@ def serve():
                     summary["chg_12mo_pct"] = _pct_change_from_baseline(
                         closes, _months_ago(today, 12)
                     )
-                except Exception:
-                    pass  # history failure leaves the change fields null
+                except Exception as e:
+                    # A failed history call must not look like "history doesn't
+                    # reach the window". Both leave chg_* null, but one is a fact
+                    # about the company and the other is a fact about Yahoo. On
+                    # 2026-08-28 two runs minutes apart flagged different
+                    # companies (GGA.V, ROCK.V) as missing change data, which was
+                    # this branch swallowing intermittent failures silently.
+                    summary["history_error"] = f"{type(e).__name__}: {e}"[:200]
                 return summary
             except Exception as e:
                 return {"symbol": symbol, "error": str(e)}
