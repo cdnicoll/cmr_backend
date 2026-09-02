@@ -101,7 +101,13 @@ image = (
 #
 # Proxy auth is defence in depth, not a replacement — the bearer token stays, so
 # a leaked proxy key alone does not reach the tools.
-@modal.asgi_app(requires_proxy_auth=True)
+# ROLLED BACK 2026-09-02: enabling this rejected LibreChat with "invalid
+# credentials for proxy authorization" — headers were being sent, the values were
+# refused. The token is the right shape (wk-/ws-, 25 chars, unquoted, right
+# order), so the most likely cause is that it was created in the wrong workspace
+# (this account also has a personal `cdnicoll` workspace). Re-enable once the
+# token is confirmed to belong to `canadian-mining-report`.
+@modal.asgi_app()
 def serve():
     import asyncio
     import concurrent.futures
