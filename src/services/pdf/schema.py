@@ -171,6 +171,164 @@ def check_master_list_integrity(entries: list[MasterListEntry]) -> list[str]:
     return issues
 
 
+RESEARCH_RESULTS = ("developments", "quiet", "unavailable")
+
+
+def _research_companies(research: dict) -> list[dict]:
+    """Pull the per-company entries out of a research object.
+
+    Accepts either `{"companies": [...]}` or `{"companies": {"NAU.V": {...}}}`,
+    because the research object is agent-authored jsonb and the 2026-08-25 run
+    found three researchers producing three shapes for the same idea. The
+    container is tolerated; what each entry must carry is not.
+    """
+    companies = research.get("companies")
+    if isinstance(companies, dict):
+        out = []
+        for key, entry in companies.items():
+            if isinstance(entry, dict):
+                out.append({**entry, "ticker": entry.get("ticker") or key})
+        return out
+    if isinstance(companies, list):
+        return [entry for entry in companies if isinstance(entry, dict)]
+    return []
+
+
+def check_research_verification(category: str, research: dict) -> tuple[list[str], dict]:
+    """Mechanical check that a category's research records what was actually checked.
+
+    Returns (issues, summary). `summary` counts what the research claims:
+    {total, checked, developments, quiet, unavailable}.
+
+    Why this exists (2026-09-02, Billy's August-update run): the period pass came
+    back with essentially no August releases, an audit found two material releases
+    it had missed, and when asked to independently verify all 50 companies the
+    agent reported 50/50 complete. Most of those had been carried forward from the
+    original research rather than checked. Challenged, it said 10 verified and 40
+    not. Asked to finish, it reported 50/50 again while its own reasoning said it
+    could not reach the sources. Nothing in the system could contradict any of it,
+    because "verified" was a sentence in a chat message rather than a record.
+
+    This does not make the agent truthful — a boolean can always be asserted. What
+    it does is make the count mechanical: verification becomes N per-company
+    records rather than one free-text claim, a company said to have developments
+    must carry a dated source to back it, and the tool response rather than the
+    agent's narration is what the operator sees. Same move as
+    check_master_list_integrity: the gate is at the write boundary, so an
+    unverifiable claim never becomes stored state.
+    """
+    issues: list[str] = []
+    entries = _research_companies(research)
+    summary = {"total": 0, "checked": 0, "developments": 0, "quiet": 0, "unavailable": 0}
+
+    if not entries:
+        issues.append(
+            f"{category}: research carries no company entries — expected "
+            '`companies` as a list of objects or an object keyed by ticker'
+        )
+        return issues, summary
+
+    summary["total"] = len(entries)
+    for index, entry in enumerate(entries):
+        ticker = entry.get("ticker")
+        label = ticker or f"companies[{index}]"
+        if not ticker:
+            issues.append(
+                f"{category}: {label} has no `ticker` (the key is `ticker`, not "
+                "`symbol` or `company` — pinned 2026-08-25 after three researchers "
+                "used three different names)"
+            )
+
+        verification = entry.get("verification")
+        if not isinstance(verification, dict):
+            issues.append(
+                f"{category}: {label} has no `verification` object — every company "
+                "needs {checked, result, sources} recording what the period pass "
+                "actually did"
+            )
+            continue
+
+        result = verification.get("result")
+        if result not in RESEARCH_RESULTS:
+            issues.append(
+                f"{category}: {label} verification.result is {result!r}, expected "
+                f"one of {list(RESEARCH_RESULTS)}"
+            )
+            continue
+        summary[result] += 1
+
+        checked = verification.get("checked")
+        if checked is True:
+            summary["checked"] += 1
+        elif result != "unavailable":
+            issues.append(
+                f"{category}: {label} has result {result!r} but checked is "
+                f"{checked!r} — a company can only be reported quiet or advancing "
+                "if its period pass actually ran"
+            )
+
+        sources = verification.get("sources") or []
+        if result == "developments":
+            dated = [
+                s
+                for s in sources
+                if isinstance(s, dict) and s.get("url") and s.get("date")
+            ]
+            if not dated:
+                issues.append(
+                    f"{category}: {label} reports developments with no dated source "
+                    "— every claimed development needs at least one {url, date}, or "
+                    "the finding is an assertion rather than a citation"
+                )
+
+    return issues, summary
+
+
+def check_synthesis_ready(categories: dict) -> tuple[list[str], dict]:
+    """Refuse synthesis until every category's research is present and complete.
+
+    The old rule was that synthesis "requires every category's research to exist".
+    Existence is not verification: a research object asserting fifty unchecked
+    companies satisfied it completely, which is how the 2026-09-02 run reached the
+    edge of synthesising against research nobody had validated.
+
+    Returns (issues, totals) so the refusal can state the real numbers rather than
+    leaving the operator to take the agent's word for them.
+    """
+    issues: list[str] = []
+    totals = {"total": 0, "checked": 0, "developments": 0, "quiet": 0, "unavailable": 0}
+
+    researched = {
+        name: block.get("research")
+        for name, block in (categories or {}).items()
+        if isinstance(block, dict) and block.get("research")
+    }
+    if not researched:
+        return (
+            ["no category research exists yet — synthesis runs after every category"],
+            totals,
+        )
+
+    for name, research in sorted(researched.items()):
+        cat_issues, summary = check_research_verification(name, research)
+        issues.extend(cat_issues)
+        for key in totals:
+            totals[key] += summary[key]
+        if summary["unavailable"]:
+            issues.append(
+                f"{name}: {summary['unavailable']} company(ies) marked unavailable "
+                "— retrieval failed for them, so their status is unknown, not quiet"
+            )
+
+    unchecked = totals["total"] - totals["checked"]
+    if unchecked:
+        issues.append(
+            f"{unchecked} of {totals['total']} companies have no completed period "
+            "pass; synthesis needs all of them"
+        )
+    return issues, totals
+
+
 class Report(BaseModel):
     meta: Meta
     introduction: Introduction

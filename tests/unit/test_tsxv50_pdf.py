@@ -7,7 +7,13 @@ import pytest
 from src.services.pdf import render_html, validate_report
 from src.services.pdf.charts import render_chart_svg
 from src.services.pdf.renderer import period_slug
-from src.services.pdf.schema import MasterListEntry, ReportValidationError, check_master_list_integrity
+from src.services.pdf.schema import (
+    MasterListEntry,
+    ReportValidationError,
+    check_master_list_integrity,
+    check_research_verification,
+    check_synthesis_ready,
+)
 
 SAMPLE_PATH = Path(__file__).resolve().parents[2] / "src/services/pdf/sample_report.json"
 
@@ -369,3 +375,126 @@ def test_check_master_list_integrity_collects_every_violation_at_once():
     assert any("duplicate ticker(s) in master_list" in i for i in issues)
     assert any("contiguous" in i for i in issues)
     assert any("not sorted by market_cap_cad_mn descending" in i for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# check_research_verification / check_synthesis_ready: the gates set_category_research
+# and set_synthesis run at their write boundaries.
+#
+# Added 2026-09-02 after Billy's August-update run. Asked to independently verify
+# 50 companies, the agent reported 50/50, then 10/40 when challenged, then 50/50
+# again while its own reasoning said it could not reach the sources. Nothing in the
+# system could contradict any of it: set_category_research took any dict, and the
+# synthesis precondition was that research *exist*, which unchecked research does.
+# ---------------------------------------------------------------------------
+
+
+def _verified(ticker, result="quiet", sources=None):
+    return {
+        "ticker": ticker,
+        "verification": {"checked": True, "result": result, "sources": sources or []},
+    }
+
+
+_DATED_SOURCE = [{"url": "https://example.com/pr", "date": "2026-08-25", "title": "Update"}]
+
+
+def test_research_without_verification_is_rejected():
+    issues, summary = check_research_verification(
+        "Gold", {"companies": [{"ticker": "NAU.V", "story": "resource growth"}]}
+    )
+    assert any("no `verification` object" in i for i in issues)
+    assert summary["checked"] == 0
+
+
+def test_research_claiming_developments_needs_a_dated_source():
+    issues, _ = check_research_verification(
+        "Gold", {"companies": [_verified("NAU.V", "developments")]}
+    )
+    assert any("no dated source" in i for i in issues)
+
+
+def test_research_claiming_developments_passes_with_a_dated_source():
+    issues, summary = check_research_verification(
+        "Gold", {"companies": [_verified("NAU.V", "developments", _DATED_SOURCE)]}
+    )
+    assert issues == []
+    assert summary["developments"] == 1
+
+
+def test_company_cannot_be_quiet_without_a_completed_pass():
+    research = {
+        "companies": [
+            {"ticker": "MLP.V", "verification": {"checked": False, "result": "quiet"}}
+        ]
+    }
+    issues, _ = check_research_verification("Gold", research)
+    assert any("checked is False" in i for i in issues)
+
+
+def test_identifier_must_be_ticker_not_symbol():
+    """The 2026-08-25 run found three researchers using ticker/symbol/company."""
+    issues, _ = check_research_verification(
+        "Silver", {"companies": [{"symbol": "SAG.V", "verification": {"checked": True, "result": "quiet"}}]}
+    )
+    assert any("no `ticker`" in i for i in issues)
+
+
+def test_dict_keyed_company_container_is_tolerated():
+    research = {"companies": {"NAU.V": {"verification": {"checked": True, "result": "quiet"}}}}
+    issues, summary = check_research_verification("Gold", research)
+    assert issues == []
+    assert summary["total"] == 1
+
+
+def test_empty_research_is_rejected():
+    issues, _ = check_research_verification("Gold", {})
+    assert any("no company entries" in i for i in issues)
+
+
+def test_synthesis_blocked_when_a_company_is_unavailable():
+    """Retrieval failure means unknown, never quiet."""
+    categories = {
+        "Gold": {"research": {"companies": [_verified("NAU.V")]}},
+        "Silver": {
+            "research": {
+                "companies": [
+                    {"ticker": "SAG.V", "verification": {"checked": False, "result": "unavailable"}}
+                ]
+            }
+        },
+    }
+    issues, totals = check_synthesis_ready(categories)
+    assert any("unavailable" in i for i in issues)
+    assert totals == {"total": 2, "checked": 1, "developments": 0, "quiet": 1, "unavailable": 1}
+
+
+def test_synthesis_reports_real_totals_when_it_refuses():
+    categories = {
+        "Gold": {
+            "research": {
+                "companies": [
+                    _verified("NAU.V"),
+                    {"ticker": "MLP.V", "verification": {"checked": False, "result": "quiet"}},
+                ]
+            }
+        }
+    }
+    issues, totals = check_synthesis_ready(categories)
+    assert totals["total"] == 2 and totals["checked"] == 1
+    assert any("1 of 2 companies" in i for i in issues)
+
+
+def test_synthesis_allowed_when_every_company_is_checked():
+    categories = {
+        "Gold": {"research": {"companies": [_verified("NAU.V", "developments", _DATED_SOURCE)]}},
+        "Silver": {"research": {"companies": [_verified("SAG.V")]}},
+    }
+    issues, totals = check_synthesis_ready(categories)
+    assert issues == []
+    assert totals["checked"] == 2
+
+
+def test_synthesis_blocked_before_any_research_exists():
+    issues, _ = check_synthesis_ready({})
+    assert any("no category research exists" in i for i in issues)

@@ -133,6 +133,8 @@ def serve():
         MasterListEntry,
         ReportValidationError,
         check_master_list_integrity,
+        check_research_verification,
+        check_synthesis_ready,
         validate_report,
     )
     from src.services.supabase import tsxv50_dao
@@ -455,19 +457,68 @@ def serve():
         category name — re-running overwrites only that category's research, leaving every
         other category's research and any already-drafted content untouched. Call this
         once per category; the synthesist requires every category's research to exist
-        before it can run. Returns the updated draft row."""
+        before it can run.
+
+        Every company entry must carry `ticker` and a `verification` object:
+        {checked: bool, result: "developments"|"quiet"|"unavailable", sources: [...]}.
+        A company reported with developments needs at least one source carrying both
+        `url` and `date`. Research that doesn't record what the period pass actually
+        did fails here with {"error": {"type": "validation_error", "issues": [...]}}
+        and nothing is written.
+
+        (Added 2026-09-02. This tool used to accept any dict at all, so "verified"
+        existed only as a claim in chat. Asked to independently verify 50 companies,
+        the agent reported 50/50, then 10/40 when challenged, then 50/50 again while
+        its own reasoning said it could not reach the sources. Nothing could
+        contradict it. Now the count is mechanical and comes back in the response.)
+
+        On success returns the updated draft row plus `verification_summary` —
+        {total, checked, developments, quiet, unavailable} for this category. Report
+        those numbers to the operator rather than your own tally of them."""
+        issues, summary = check_research_verification(category, research)
+        if issues:
+            return {"error": {"type": "validation_error", "issues": issues}}
         try:
-            return await drafts.upsert_category_research(
+            row = await drafts.upsert_category_research(
                 period_label, draft_slug, category, research
             )
         except InvalidCategoryError as e:
             return {"error": {"type": "invalid_category", "message": str(e), "valid": e.valid}}
+        if isinstance(row, dict):
+            row = {**row, "verification_summary": summary}
+        return row
 
     @mcp.tool()
     async def set_synthesis(period_label: str, synthesis: dict, draft_slug: str = "primary") -> dict:
         """Write the synthesist's cross-company trend-detection/sector-comparison output.
-        Runs once, only after every category's research exists — internal editorial
-        machinery, never printed in the rendered report. Returns the updated draft row."""
+        Runs once, only after every category's research is complete — internal
+        editorial machinery, never printed in the rendered report.
+
+        Gated: refuses unless every company in every category carries a completed
+        period pass. Companies marked `unavailable` (retrieval failed) block
+        synthesis too — their status is unknown, not quiet. On refusal returns
+        {"error": {"type": "verification_incomplete", "issues": [...], "totals": {...}}}
+        with the real counts, and nothing is written.
+
+        (Added 2026-09-02. The rule was that research must *exist*; existence is not
+        verification, and a research object asserting fifty unchecked companies
+        satisfied it. That is how the August run reached the edge of synthesising
+        against research nobody had validated. Billy stopped it by hand.)
+
+        The `totals` in a refusal are the mechanical count. If they disagree with
+        what you believe you verified, the totals are right."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        if not draft:
+            return {"error": {"type": "not_found", "message": f"no draft {period_label}/{draft_slug}"}}
+        issues, totals = check_synthesis_ready(draft.get("categories") or {})
+        if issues:
+            return {
+                "error": {
+                    "type": "verification_incomplete",
+                    "issues": issues,
+                    "totals": totals,
+                }
+            }
         return await drafts.set_synthesis(period_label, draft_slug, synthesis)
 
     @mcp.tool()
