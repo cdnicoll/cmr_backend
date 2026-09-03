@@ -162,6 +162,7 @@ def serve():
     # substitute so a company is never silently dropped over a name lookup
     # gap alone (2026-07-28: this nearly re-dropped Vizsla Royalties).
     TSXV50_NAMES = {entry["symbol"]: entry["name"] for entry in TSXV50_ENTRIES if entry.get("name")}
+    CAT_BY_SYMBOL = {entry["symbol"]: entry.get("category") for entry in TSXV50_ENTRIES}
 
     class BearerAuthMiddleware(BaseHTTPMiddleware):
         def __init__(self, app, token: str):
@@ -322,13 +323,9 @@ def serve():
         except Exception as e:
             return {"error": str(e)}
 
-    @mcp.tool()
-    def screen_tsxv50() -> list[dict]:
-        """Screen all TSX Venture 50 symbols in parallel and return key fundamentals
-        (price, market cap, sector, P/E) plus chg_3mo_pct and chg_12mo_pct — percent price
-        change over ~3 and ~12 calendar months, computed from adjusted closes and rounded
-        to 1 decimal (null when history doesn't cover the window, e.g. new listings).
-        Uses 10 concurrent threads to fetch all 50 watchlist symbols efficiently."""
+    def _screen_all() -> list[dict]:
+        """Screen every watchlist symbol; shared by the screen_tsxv50 tool and by
+        build_master_list so both read one consistent pull."""
         def fetch_summary(symbol: str) -> dict:
             try:
                 ticker = yf.Ticker(symbol)
@@ -376,6 +373,50 @@ def serve():
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             return list(executor.map(fetch_summary, TSXV50))
+
+    @mcp.tool()
+    def screen_tsxv50() -> list[dict]:
+        """Screen all TSX Venture 50 symbols in parallel and return key fundamentals
+        (price, market cap, sector, P/E) plus chg_3mo_pct and chg_12mo_pct — percent price
+        change over ~3 and ~12 calendar months, computed from adjusted closes and rounded
+        to 1 decimal (null when history doesn't cover the window, e.g. new listings).
+        Uses 10 concurrent threads to fetch all 50 watchlist symbols efficiently.
+
+        In Phase 1, prefer build_master_list, which calls this once, stores the snapshot,
+        and ranks the list server-side — an LLM hand-sorting the result loops against the
+        integrity check."""
+        return _screen_all()
+
+    def _build_master_list_from_snapshot(snapshot: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Build the ranked master_list from a screener snapshot, server-side.
+
+        This is the deterministic version of Phase 1's ranking. It exists because an
+        LLM hand-sorting 49 companies by market cap fails: on 2026-09-03 grok-3 mixed a
+        prior draft's ranks with the fresh caps, ranked SCZ.V (1326.0) below BZ.V
+        (1308.1), and looped five times against check_master_list_integrity without
+        fixing it. Round first, then sort by the rounded value, tie-break on ticker —
+        the same rule the prose asked the agent to follow, done in code so it cannot be
+        gotten wrong. Returns (master_list, excluded)."""
+        rows, excluded = [], []
+        for e in snapshot or []:
+            sym = e.get("symbol")
+            mc = e.get("market_cap")
+            if e.get("error") or mc is None:
+                excluded.append({"ticker": sym, "reason": e.get("error") or "null market cap"})
+                continue
+            rows.append({
+                "ticker": sym,
+                "company": e.get("name") or TSXV50_NAMES.get(sym) or sym,
+                "category": CAT_BY_SYMBOL.get(sym) or "Unclassified",
+                "market_cap_cad_mn": round(mc / 1_000_000, 1),
+            })
+        rows.sort(key=lambda r: (-r["market_cap_cad_mn"], r["ticker"]))
+        master_list = [
+            {"rank": i, "company": r["company"], "ticker": r["ticker"],
+             "category": r["category"], "market_cap_cad_mn": r["market_cap_cad_mn"]}
+            for i, r in enumerate(rows, 1)
+        ]
+        return master_list, excluded
 
     @mcp.tool()
     def generate_tsxv50_pdf(report_json: dict) -> dict:
@@ -492,6 +533,44 @@ def serve():
         and the drafter read it via `get_draft`, they do not re-pull. `meta.data_as_of`
         is this pull's date. Returns the updated draft row."""
         return _slim_draft(await drafts.set_screener_snapshot(period_label, draft_slug, snapshot))
+
+    @mcp.tool()
+    async def build_master_list(period_label: str, draft_slug: str = "primary") -> dict:
+        """Phase 1 in one deterministic call: screen the watchlist, lock the snapshot, and
+        build the ranked master list server-side. **Use this instead of hand-building the
+        master list from screen_tsxv50.** An LLM sorting ~50 companies by market cap gets it
+        wrong and then loops against the integrity check (2026-09-03: grok-3 ranked SCZ.V
+        below a smaller BZ.V and retried five times). This does the round-then-sort,
+        tie-break, ranking and category assignment in code, so it cannot be gotten wrong.
+
+        Reuses the draft's screener_snapshot if one is already stored; otherwise it runs
+        screen_tsxv50 once and stores it, so the master-list caps and every downstream
+        profile table read the same pull (gap 13). Excludes symbols with null screener data
+        and reports them.
+
+        Returns the updated draft row (category index) plus `master_list` (full),
+        `master_list_count`, and `excluded` [{ticker, reason}]. Present Checkpoint 1 from
+        this response; do not re-sort or re-rank it."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        if draft is None:
+            return {"error": {"type": "not_found",
+                              "message": f"no draft {period_label}/{draft_slug}; call start_report first"}}
+        snapshot = draft.get("screener_snapshot")
+        if not snapshot:
+            snapshot = _screen_all()
+            await drafts.set_screener_snapshot(period_label, draft_slug, snapshot)
+        master_list, excluded = _build_master_list_from_snapshot(snapshot)
+        try:
+            entries = [MasterListEntry.model_validate(e) for e in master_list]
+        except ValidationError as e:
+            return {"error": {"type": "validation_error",
+                              "issues": [str(err) for err in e.errors()]}}
+        integrity = check_master_list_integrity(entries)
+        if integrity:  # should never happen — the sort is deterministic
+            return {"error": {"type": "internal_sort_error", "issues": integrity}}
+        row = await drafts.set_master_list(period_label, draft_slug, master_list)
+        return {**_slim_draft(row), "master_list": master_list,
+                "master_list_count": len(master_list), "excluded": excluded}
 
     @mcp.tool()
     async def set_introduction(
