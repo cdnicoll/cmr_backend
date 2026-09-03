@@ -174,6 +174,36 @@ def serve():
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
             return await call_next(request)
 
+    def _slim_draft(draft: dict, category: str = "", view: str = "") -> dict:
+        """Return a draft with `categories` reduced to a lightweight index, unless a
+        specific category (full block) or view='full' is asked for. Keeps every other
+        field (master_list, synthesis, meta, screener_snapshot, introduction,
+        finalize_result) in full. Used by get_draft AND by every write tool's response,
+        because the full categories map overflows the MCP client once several categories
+        carry research/content (2026-09-02: get_draft hit 126 KB; add_category returns
+        the full row and overflowed the same way)."""
+        if not isinstance(draft, dict) or view == "full":
+            return draft
+        cats = draft.get("categories") or {}
+        if category:
+            block = cats.get(category)
+            return {**draft, "categories": {category: block} if block is not None else {}}
+        index = {}
+        for name, blk in cats.items():
+            if not isinstance(blk, dict):
+                continue
+            research = blk.get("research") or {}
+            companies = research.get("companies") if isinstance(research, dict) else None
+            rc = len(companies) if isinstance(companies, (list, dict)) else 0
+            index[name] = {
+                "status": blk.get("status"),
+                "has_research": bool(research),
+                "research_companies": rc,
+                "has_content": bool(blk.get("content")),
+                "updated_at": blk.get("updated_at"),
+            }
+        return {**draft, "categories": index, "categories_view": "index"}
+
     mcp = FastMCP("CMR Finance")
 
     @mcp.tool()
@@ -395,7 +425,7 @@ def serve():
         introduction, categories, synthesis, finalize_result, conversation_ids, pdf_url,
         created_at, updated_at}."""
         await drafts.get_or_create_draft(period_label, draft_slug)
-        return await drafts.set_meta(period_label, draft_slug, meta)
+        return _slim_draft(await drafts.set_meta(period_label, draft_slug, meta))
 
     @mcp.tool()
     async def set_meta(period_label: str, meta: dict, draft_slug: str = "primary") -> dict:
@@ -406,7 +436,7 @@ def serve():
         later (finalizer) with the complete object once the real tagline is decided.
         Full overwrite, not a merge — pass every field, not just the one that changed.
         Returns the updated draft row."""
-        return await drafts.set_meta(period_label, draft_slug, meta)
+        return _slim_draft(await drafts.set_meta(period_label, draft_slug, meta))
 
     @mcp.tool()
     async def set_master_list(
@@ -446,7 +476,7 @@ def serve():
                     ],
                 }
             }
-        return await drafts.set_master_list(period_label, draft_slug, master_list)
+        return _slim_draft(await drafts.set_master_list(period_label, draft_slug, master_list))
 
     @mcp.tool()
     async def set_screener_snapshot(
@@ -461,7 +491,7 @@ def serve():
         taken minutes apart and ~20 companies' caps mismatched). Call once; researchers
         and the drafter read it via `get_draft`, they do not re-pull. `meta.data_as_of`
         is this pull's date. Returns the updated draft row."""
-        return await drafts.set_screener_snapshot(period_label, draft_slug, snapshot)
+        return _slim_draft(await drafts.set_screener_snapshot(period_label, draft_slug, snapshot))
 
     @mcp.tool()
     async def set_introduction(
@@ -471,7 +501,7 @@ def serve():
         {sections: [{subhead, body}, ...]}. This is the executive-summary-level content
         that needs full-draft visibility, not per-category drafting. Returns the updated
         draft row."""
-        return await drafts.set_introduction(period_label, draft_slug, introduction)
+        return _slim_draft(await drafts.set_introduction(period_label, draft_slug, introduction))
 
     @mcp.tool()
     async def set_category_research(
@@ -519,7 +549,7 @@ def serve():
         except InvalidCategoryError as e:
             return {"error": {"type": "invalid_category", "message": str(e), "valid": e.valid}}
         if isinstance(row, dict):
-            row = {**row, "verification_summary": summary}
+            row = {**_slim_draft(row), "verification_summary": summary}
         return row
 
     @mcp.tool()
@@ -557,7 +587,7 @@ def serve():
                     "totals": totals,
                 }
             }
-        return await drafts.set_synthesis(period_label, draft_slug, synthesis)
+        return _slim_draft(await drafts.set_synthesis(period_label, draft_slug, synthesis))
 
     @mcp.tool()
     async def add_category(
@@ -583,9 +613,9 @@ def serve():
         in_progress: a stale "locked" verdict must never survive an edit. Returns the
         updated draft row."""
         try:
-            return await drafts.upsert_category_content(
+            return _slim_draft(await drafts.upsert_category_content(
                 period_label, draft_slug, category, content, sources
-            )
+            ))
         except InvalidCategoryError as e:
             return {"error": {"type": "invalid_category", "message": str(e), "valid": e.valid}}
 
@@ -696,27 +726,7 @@ def serve():
                     "message": f"no draft for period_label={period_label!r} draft_slug={draft_slug!r}; call start_report first",
                 }
             }
-        if view == "full":
-            return draft
-        cats = draft.get("categories") or {}
-        if category:
-            block = cats.get(category)
-            return {**draft, "categories": {category: block} if block is not None else {}}
-        index = {}
-        for name, blk in cats.items():
-            if not isinstance(blk, dict):
-                continue
-            research = blk.get("research") or {}
-            companies = research.get("companies") if isinstance(research, dict) else None
-            rc = len(companies) if isinstance(companies, (list, dict)) else 0
-            index[name] = {
-                "status": blk.get("status"),
-                "has_research": bool(research),
-                "research_companies": rc,
-                "has_content": bool(blk.get("content")),
-                "updated_at": blk.get("updated_at"),
-            }
-        return {**draft, "categories": index, "categories_view": "index"}
+        return _slim_draft(draft, category=category, view=view)
 
     @mcp.tool()
     async def list_drafts(period_label: str) -> list[dict]:
