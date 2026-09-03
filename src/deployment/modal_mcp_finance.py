@@ -666,14 +666,28 @@ def serve():
         return result
 
     @mcp.tool()
-    async def get_draft(period_label: str, draft_slug: str = "primary") -> dict:
+    async def get_draft(
+        period_label: str, draft_slug: str = "primary", category: str = "", view: str = ""
+    ) -> dict:
         """Read the current state of one draft. Every pipeline role calls this first
         on every turn — never trust conversation memory for state; a same-day gap and
-        a three-day gap must look identical. Returns the full row: {period_label,
-        draft_slug, status, meta, master_list, introduction, categories, synthesis,
-        finalize_result, conversation_ids, pdf_url, created_at, updated_at}, or
-        {"error": {"type": "not_found", ...}} if no draft exists yet for this
-        (period_label, draft_slug) — call start_report first in that case."""
+        a three-day gap must look identical.
+
+        `categories` is heavy once several categories carry research (a full edition
+        exceeds an MCP client's response limit — 2026-09-02), so by default this
+        returns a **category index**, not the full research/content: each category maps
+        to {status, has_research, research_companies, has_content, updated_at}. That is
+        all a role needs to tell which phase it is in and which categories are done.
+        `master_list`, `synthesis`, `meta`, `screener_snapshot`, `introduction`,
+        `finalize_result` are always returned in full.
+
+        Pass `category="Silver"` to get that one category's FULL block (research +
+        content) — this is how a researcher or drafter reads its own category without
+        hauling every other category's research into the turn. Pass `view="full"` to
+        get every category's full block (rarely needed; may exceed limits).
+
+        Returns {"error": {"type": "not_found", ...}} if no draft exists yet — call
+        start_report first."""
         draft = await drafts.get_draft(period_label, draft_slug)
         if draft is None:
             return {
@@ -682,7 +696,27 @@ def serve():
                     "message": f"no draft for period_label={period_label!r} draft_slug={draft_slug!r}; call start_report first",
                 }
             }
-        return draft
+        if view == "full":
+            return draft
+        cats = draft.get("categories") or {}
+        if category:
+            block = cats.get(category)
+            return {**draft, "categories": {category: block} if block is not None else {}}
+        index = {}
+        for name, blk in cats.items():
+            if not isinstance(blk, dict):
+                continue
+            research = blk.get("research") or {}
+            companies = research.get("companies") if isinstance(research, dict) else None
+            rc = len(companies) if isinstance(companies, (list, dict)) else 0
+            index[name] = {
+                "status": blk.get("status"),
+                "has_research": bool(research),
+                "research_companies": rc,
+                "has_content": bool(blk.get("content")),
+                "updated_at": blk.get("updated_at"),
+            }
+        return {**draft, "categories": index, "categories_view": "index"}
 
     @mcp.tool()
     async def list_drafts(period_label: str) -> list[dict]:
