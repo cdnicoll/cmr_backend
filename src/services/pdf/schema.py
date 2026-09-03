@@ -173,6 +173,50 @@ def check_master_list_integrity(entries: list[MasterListEntry]) -> list[str]:
 
 RESEARCH_RESULTS = ("developments", "quiet", "unavailable")
 
+# A completed period pass is one of these two: a real search that found something,
+# or a real search that found nothing. `unavailable` (retrieval failed) is NOT
+# complete — the company's status is unknown, and it blocks synthesis.
+COMPLETED_RESULTS = ("developments", "quiet")
+
+# Domains that are market-data pages or content aggregators, not primary sources.
+# A claimed development cited only from one of these is not primary-verified
+# (2026-09-02, Billy: MLP.V's Aug 26 drill result was "verified" off a Yahoo Finance
+# link). Company IR pages, the newswires below, regulators, and the Junior Mining
+# Network aggregator-of-record are primary; these are not.
+NON_PRIMARY_DOMAINS = (
+    "finance.yahoo.com", "yahoo.com",
+    "google.com/finance", "google.com",
+    "perplexity.ai",
+    "stockhouse.com", "stocktwits.com",
+    "marketwatch.com", "investing.com", "tradingview.com",
+    "barchart.com", "wsj.com/market-data",
+    "simplywall.st", "wallmine.com", "marketbeat.com",
+    "seekingalpha.com", "fool.com", "zacks.com",
+    "morningstar.com", "tipranks.com",
+    "bloomberg.com/quote", "reuters.com/markets",
+    "wikipedia.org",
+)
+
+
+def _source_domain(url: str) -> str:
+    """Bare host of a URL, lowercased, no scheme/www/path — for domain matching."""
+    host = str(url).split("//", 1)[-1].split("/", 1)[0].split("?", 1)[0].lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _is_primary_source(source: dict) -> bool:
+    """A source is primary-usable for a development if it has a url AND a date AND
+    its domain is not a known market-data/aggregator site. This is a deny-list, not
+    an allow-list: it cannot enumerate every company IR domain, so it rejects the
+    known non-primary sites and accepts everything else (company sites, newswires,
+    regulators, JMN). The point is that 'has a dated URL' is not 'has a primary
+    source' — a Yahoo quote page satisfied the old rule and should not."""
+    if not (isinstance(source, dict) and source.get("url") and source.get("date")):
+        return False
+    domain = _source_domain(source["url"])
+    return not any(domain == d or domain.endswith("." + d) or d in domain
+                   for d in NON_PRIMARY_DOMAINS)
+
 
 def _research_companies(research: dict) -> list[dict]:
     """Pull the per-company entries out of a research object.
@@ -194,28 +238,28 @@ def _research_companies(research: dict) -> list[dict]:
     return []
 
 
-def check_research_verification(category: str, research: dict) -> tuple[list[str], dict]:
-    """Mechanical check that a category's research records what was actually checked.
+def check_research_verification(
+    category: str, research: dict, expected_tickers: "list[str] | None" = None
+) -> tuple[list[str], dict]:
+    """Mechanical check that a category's research records what was actually checked,
+    for every company the category is supposed to hold.
 
     Returns (issues, summary). `summary` counts what the research claims:
     {total, checked, developments, quiet, unavailable}.
 
-    Why this exists (2026-09-02, Billy's August-update run): the period pass came
-    back with essentially no August releases, an audit found two material releases
-    it had missed, and when asked to independently verify all 50 companies the
-    agent reported 50/50 complete. Most of those had been carried forward from the
-    original research rather than checked. Challenged, it said 10 verified and 40
-    not. Asked to finish, it reported 50/50 again while its own reasoning said it
-    could not reach the sources. Nothing in the system could contradict any of it,
-    because "verified" was a sentence in a chat message rather than a record.
+    `expected_tickers` is the category's master-list membership. When given, the
+    research must carry a record for *every* one of them and for no ticker outside
+    them. Passing it is what closes the 2026-09-02 hole: the first version of this
+    gate validated every company *present* in the research, but never that every
+    required company *was* present, so a researcher that persisted 2 of 30 companies
+    (each verified) passed. Billy's fresh run reproduced exactly that — 11 records,
+    claimed 50/50. The gate now grounds against the master list, not against the
+    research object's own contents. Same move as check_master_list_integrity.
 
-    This does not make the agent truthful — a boolean can always be asserted. What
-    it does is make the count mechanical: verification becomes N per-company
-    records rather than one free-text claim, a company said to have developments
-    must carry a dated source to back it, and the tool response rather than the
-    agent's narration is what the operator sees. Same move as
-    check_master_list_integrity: the gate is at the write boundary, so an
-    unverifiable claim never becomes stored state.
+    A boolean can always be asserted; this does not make the agent truthful. It
+    makes the count mechanical (N records, not a chat claim), requires a company
+    with developments to cite a *primary* dated source (a Yahoo quote page is not
+    one), and requires the set of records to match the category's real membership.
     """
     issues: list[str] = []
     entries = _research_companies(research)
@@ -229,6 +273,7 @@ def check_research_verification(category: str, research: dict) -> tuple[list[str
         return issues, summary
 
     summary["total"] = len(entries)
+    seen: set[str] = set()
     for index, entry in enumerate(entries):
         ticker = entry.get("ticker")
         label = ticker or f"companies[{index}]"
@@ -238,6 +283,10 @@ def check_research_verification(category: str, research: dict) -> tuple[list[str
                 "`symbol` or `company` — pinned 2026-08-25 after three researchers "
                 "used three different names)"
             )
+        else:
+            if ticker in seen:
+                issues.append(f"{category}: {ticker} appears more than once in research")
+            seen.add(ticker)
 
         verification = entry.get("verification")
         if not isinstance(verification, dict):
@@ -267,33 +316,72 @@ def check_research_verification(category: str, research: dict) -> tuple[list[str
                 "if its period pass actually ran"
             )
 
-        sources = verification.get("sources") or []
         if result == "developments":
-            dated = [
-                s
-                for s in sources
-                if isinstance(s, dict) and s.get("url") and s.get("date")
-            ]
-            if not dated:
-                issues.append(
-                    f"{category}: {label} reports developments with no dated source "
-                    "— every claimed development needs at least one {url, date}, or "
-                    "the finding is an assertion rather than a citation"
+            sources = verification.get("sources") or []
+            if not any(_is_primary_source(s) for s in sources):
+                dated = [s for s in sources
+                         if isinstance(s, dict) and s.get("url") and s.get("date")]
+                why = (
+                    "with no dated source" if not dated
+                    else "whose only dated sources are market-data/aggregator pages "
+                    "(e.g. Yahoo Finance); a development needs a primary source — "
+                    "the company release, a newswire, a regulator, or the JMN "
+                    "aggregator-of-record"
                 )
+                issues.append(
+                    f"{category}: {label} reports developments {why}"
+                )
+
+    # Completeness against the category's real membership.
+    if expected_tickers is not None:
+        expected = set(expected_tickers)
+        missing = sorted(expected - seen)
+        extra = sorted(seen - expected)
+        if missing:
+            issues.append(
+                f"{category}: research is missing {len(missing)} of "
+                f"{len(expected)} master-list companies — every one needs a record "
+                f"(developments/quiet, or unavailable if retrieval failed): {missing}"
+            )
+        if extra:
+            issues.append(
+                f"{category}: research contains tickers not in this category's "
+                f"master-list membership: {extra}"
+            )
 
     return issues, summary
 
 
-def check_synthesis_ready(categories: dict) -> tuple[list[str], dict]:
-    """Refuse synthesis until every category's research is present and complete.
+def _category_tickers(master_list, category: str) -> list[str]:
+    """Master-list tickers assigned to one category. This is the mechanical
+    category count Billy asked for (2026-09-02: the agent's ledger said Gold 27
+    while the master list held 30) — membership derived from master_list, never
+    asserted."""
+    out = []
+    for entry in master_list or []:
+        cat = entry.get("category") if isinstance(entry, dict) else getattr(entry, "category", None)
+        tk = entry.get("ticker") if isinstance(entry, dict) else getattr(entry, "ticker", None)
+        if cat == category and tk:
+            out.append(tk)
+    return out
 
-    The old rule was that synthesis "requires every category's research to exist".
-    Existence is not verification: a research object asserting fifty unchecked
-    companies satisfied it completely, which is how the 2026-09-02 run reached the
-    edge of synthesising against research nobody had validated.
 
-    Returns (issues, totals) so the refusal can state the real numbers rather than
-    leaving the operator to take the agent's word for them.
+def check_synthesis_ready(categories: dict, master_list=None) -> tuple[list[str], dict]:
+    """Refuse synthesis until every master-list company has a completed period pass.
+
+    Grounds against `master_list`, not against the research objects' own contents.
+    The first version counted what was *present* in the research and passed when all
+    of it was checked — so 11 records claiming to cover 50 companies satisfied it
+    (2026-09-02, Billy). Now every master-list ticker must carry a terminal research
+    record (developments/quiet) somewhere; `unavailable` (retrieval failed) blocks
+    synthesis because the status is unknown, and a ticker with no record at all
+    blocks it because it was never researched.
+
+    `master_list` is optional only for backward compatibility; production always
+    passes it. Without it the check degrades to the old present-and-verified pass.
+
+    Returns (issues, totals) so the refusal states real numbers — including which
+    tickers are missing — rather than leaving the operator to take the agent's word.
     """
     issues: list[str] = []
     totals = {"total": 0, "checked": 0, "developments": 0, "quiet": 0, "unavailable": 0}
@@ -305,27 +393,48 @@ def check_synthesis_ready(categories: dict) -> tuple[list[str], dict]:
     }
     if not researched:
         return (
-            ["no category research exists yet — synthesis runs after every category"],
+            ["no category research exists yet — synthesis runs after every company"],
             totals,
         )
 
+    # Terminal state per ticker, gathered across every category's research.
+    result_by_ticker: dict[str, str] = {}
     for name, research in sorted(researched.items()):
-        cat_issues, summary = check_research_verification(name, research)
+        expected = _category_tickers(master_list, name) if master_list else None
+        cat_issues, summary = check_research_verification(name, research, expected)
         issues.extend(cat_issues)
         for key in totals:
             totals[key] += summary[key]
-        if summary["unavailable"]:
-            issues.append(
-                f"{name}: {summary['unavailable']} company(ies) marked unavailable "
-                "— retrieval failed for them, so their status is unknown, not quiet"
-            )
+        for entry in _research_companies(research):
+            tk = entry.get("ticker")
+            v = entry.get("verification")
+            if tk and isinstance(v, dict) and v.get("result") in RESEARCH_RESULTS:
+                result_by_ticker[tk] = v["result"]
 
-    unchecked = totals["total"] - totals["checked"]
-    if unchecked:
-        issues.append(
-            f"{unchecked} of {totals['total']} companies have no completed period "
-            "pass; synthesis needs all of them"
-        )
+    if master_list:
+        all_tickers = [e.get("ticker") for e in master_list if isinstance(e, dict) and e.get("ticker")]
+        missing = sorted(t for t in all_tickers if t not in result_by_ticker)
+        unavailable = sorted(t for t, r in result_by_ticker.items() if r == "unavailable")
+        completed = sum(1 for t in all_tickers if result_by_ticker.get(t) in COMPLETED_RESULTS)
+        if missing:
+            issues.append(
+                f"{len(missing)} of {len(all_tickers)} master-list companies have no "
+                f"research record; synthesis needs every one: {missing}"
+            )
+        if unavailable:
+            issues.append(
+                f"{len(unavailable)} company(ies) marked unavailable — retrieval "
+                f"failed, so their status is unknown, not quiet: {unavailable}"
+            )
+        totals["completed"] = completed
+        totals["required"] = len(all_tickers)
+    else:
+        unchecked = totals["total"] - totals["checked"]
+        if unchecked:
+            issues.append(
+                f"{unchecked} of {totals['total']} companies have no completed "
+                "period pass; synthesis needs all of them"
+            )
     return issues, totals
 
 

@@ -127,6 +127,7 @@ def serve():
     from src.services.pdf.schema import (
         MasterListEntry,
         ReportValidationError,
+        _category_tickers,
         check_master_list_integrity,
         check_research_verification,
         check_synthesis_ready,
@@ -448,6 +449,21 @@ def serve():
         return await drafts.set_master_list(period_label, draft_slug, master_list)
 
     @mcp.tool()
+    async def set_screener_snapshot(
+        period_label: str, snapshot: list[dict], draft_slug: str = "primary"
+    ) -> dict:
+        """Store this run's single `screen_tsxv50` result on the draft (Phase 1, right
+        after the one screener pull). Pass the screener response as-is: a list of
+        per-company objects keyed by `symbol`. Every downstream market-data field —
+        the master-list caps, and every profile table's price/52-week/change values —
+        is read back from this one snapshot, so the table and the profiles can never
+        disagree by live movement (known gap 13: in Q2 they came from separate pulls
+        taken minutes apart and ~20 companies' caps mismatched). Call once; researchers
+        and the drafter read it via `get_draft`, they do not re-pull. `meta.data_as_of`
+        is this pull's date. Returns the updated draft row."""
+        return await drafts.set_screener_snapshot(period_label, draft_slug, snapshot)
+
+    @mcp.tool()
     async def set_introduction(
         period_label: str, introduction: dict, draft_slug: str = "primary"
     ) -> dict:
@@ -480,10 +496,20 @@ def serve():
         its own reasoning said it could not reach the sources. Nothing could
         contradict it. Now the count is mechanical and comes back in the response.)
 
+        The research must carry a record for **every** master-list company in this
+        category and for none outside it — a record is developments/quiet (the period
+        pass ran) or unavailable (retrieval failed). Persisting a subset is rejected
+        with the missing tickers named. A company with developments must cite a
+        primary dated source (a company release, newswire, regulator, or the JMN
+        aggregator-of-record); a market-data page such as Yahoo Finance does not count.
+
         On success returns the updated draft row plus `verification_summary` —
-        {total, checked, developments, quiet, unavailable} for this category. Report
-        those numbers to the operator rather than your own tally of them."""
-        issues, summary = check_research_verification(category, research)
+        {total, checked, developments, quiet, unavailable} for this category. `total`
+        now equals the category's master-list size, so it is the mechanical category
+        count. Report those numbers to the operator rather than your own tally."""
+        draft = await drafts.get_draft(period_label, draft_slug)
+        expected = _category_tickers(draft.get("master_list"), category) if draft else None
+        issues, summary = check_research_verification(category, research, expected or None)
         if issues:
             return {"error": {"type": "validation_error", "issues": issues}}
         try:
@@ -502,23 +528,27 @@ def serve():
         Runs once, only after every category's research is complete — internal
         editorial machinery, never printed in the rendered report.
 
-        Gated: refuses unless every company in every category carries a completed
-        period pass. Companies marked `unavailable` (retrieval failed) block
-        synthesis too — their status is unknown, not quiet. On refusal returns
-        {"error": {"type": "verification_incomplete", "issues": [...], "totals": {...}}}
-        with the real counts, and nothing is written.
+        Gated: refuses unless **every master-list company** carries a completed
+        period pass (developments/quiet). A company with no research record blocks
+        synthesis because it was never researched; one marked `unavailable`
+        (retrieval failed) blocks it because its status is unknown. On refusal
+        returns {"error": {"type": "verification_incomplete", "issues": [...],
+        "totals": {...}}} naming the missing tickers, and nothing is written.
 
-        (Added 2026-09-02. The rule was that research must *exist*; existence is not
-        verification, and a research object asserting fifty unchecked companies
-        satisfied it. That is how the August run reached the edge of synthesising
-        against research nobody had validated. Billy stopped it by hand.)
+        (Added 2026-09-02; grounded against master_list 2026-09-02. The first rule
+        was that research must *exist*; the second counted what was present. Both
+        passed a draft that covered 11 of 50 companies — a research object can only
+        vouch for what is in it. This grounds the count against the master list.
+        Billy stopped both by hand.)
 
         The `totals` in a refusal are the mechanical count. If they disagree with
         what you believe you verified, the totals are right."""
         draft = await drafts.get_draft(period_label, draft_slug)
         if not draft:
             return {"error": {"type": "not_found", "message": f"no draft {period_label}/{draft_slug}"}}
-        issues, totals = check_synthesis_ready(draft.get("categories") or {})
+        issues, totals = check_synthesis_ready(
+            draft.get("categories") or {}, draft.get("master_list")
+        )
         if issues:
             return {
                 "error": {

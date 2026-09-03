@@ -10,6 +10,8 @@ from src.services.pdf.renderer import period_slug
 from src.services.pdf.schema import (
     MasterListEntry,
     ReportValidationError,
+    _category_tickers,
+    _is_primary_source,
     check_master_list_integrity,
     check_research_verification,
     check_synthesis_ready,
@@ -453,7 +455,11 @@ def test_empty_research_is_rejected():
 
 
 def test_synthesis_blocked_when_a_company_is_unavailable():
-    """Retrieval failure means unknown, never quiet."""
+    """Retrieval failure means unknown, never quiet. Grounded against master_list."""
+    ml = [
+        {"rank": 1, "ticker": "NAU.V", "company": "Nevgold", "category": "Gold", "market_cap_cad_mn": 243.1},
+        {"rank": 2, "ticker": "SAG.V", "company": "Sterling", "category": "Silver", "market_cap_cad_mn": 67.5},
+    ]
     categories = {
         "Gold": {"research": {"companies": [_verified("NAU.V")]}},
         "Silver": {
@@ -464,9 +470,9 @@ def test_synthesis_blocked_when_a_company_is_unavailable():
             }
         },
     }
-    issues, totals = check_synthesis_ready(categories)
-    assert any("unavailable" in i for i in issues)
-    assert totals == {"total": 2, "checked": 1, "developments": 0, "quiet": 1, "unavailable": 1}
+    issues, totals = check_synthesis_ready(categories, ml)
+    assert any("unavailable" in i and "SAG.V" in i for i in issues)
+    assert totals["required"] == 2 and totals["completed"] == 1
 
 
 def test_synthesis_reports_real_totals_when_it_refuses():
@@ -498,3 +504,99 @@ def test_synthesis_allowed_when_every_company_is_checked():
 def test_synthesis_blocked_before_any_research_exists():
     issues, _ = check_synthesis_ready({})
     assert any("no category research exists" in i for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Completeness + primary-source gate (2026-09-02, Billy's fresh run).
+# The first verification gate validated companies *present* in the research but
+# never that every master-list ticker *was* present, so 11 records claiming 50/50
+# passed. These ground the check against master_list, and enforce a primary source
+# for developments (a Yahoo quote page passed the old "has a dated URL" rule).
+# ---------------------------------------------------------------------------
+
+_ML = [
+    {"rank": 1, "ticker": "OMG.V", "company": "Omai", "category": "Gold", "market_cap_cad_mn": 1793.2},
+    {"rank": 2, "ticker": "NAU.V", "company": "Nevgold", "category": "Gold", "market_cap_cad_mn": 243.1},
+    {"rank": 3, "ticker": "SCZ.V", "company": "Santacruz", "category": "Silver", "market_cap_cad_mn": 1293.5},
+]
+
+
+def _rec(ticker, result="quiet", sources=None):
+    return {"ticker": ticker, "verification": {"checked": result != "unavailable",
+            "result": result, "sources": sources or []}}
+
+
+_NEWSWIRE = [{"url": "https://www.globenewswire.com/news/x", "date": "2026-08-25", "title": "Update"}]
+_YAHOO = [{"url": "https://finance.yahoo.com/quote/NAU.V", "date": "2026-08-25", "title": "Quote"}]
+
+
+def test_category_tickers_derives_membership_from_master_list():
+    assert _category_tickers(_ML, "Gold") == ["OMG.V", "NAU.V"]
+    assert _category_tickers(_ML, "Silver") == ["SCZ.V"]
+
+
+def test_research_missing_a_category_company_is_rejected():
+    """The 11-of-50 hole: 1 of 2 Gold companies persisted, that one verified."""
+    research = {"companies": [_rec("OMG.V")]}
+    issues, summary = check_research_verification("Gold", research, ["OMG.V", "NAU.V"])
+    assert any("missing 1 of 2" in i and "NAU.V" in i for i in issues)
+    assert summary["total"] == 1  # the count is honest about what's there
+
+
+def test_research_complete_category_passes():
+    research = {"companies": [_rec("OMG.V"), _rec("NAU.V")]}
+    issues, _ = check_research_verification("Gold", research, ["OMG.V", "NAU.V"])
+    assert issues == []
+
+
+def test_research_rejects_ticker_outside_the_category():
+    research = {"companies": [_rec("OMG.V"), _rec("NAU.V"), _rec("SCZ.V")]}
+    issues, _ = check_research_verification("Gold", research, ["OMG.V", "NAU.V"])
+    assert any("not in this category" in i and "SCZ.V" in i for i in issues)
+
+
+def test_developments_from_yahoo_only_is_not_primary_verified():
+    research = {"companies": [_rec("NAU.V", "developments", _YAHOO)]}
+    issues, _ = check_research_verification("Gold", research, ["NAU.V"])
+    assert any("primary source" in i for i in issues)
+
+
+def test_developments_from_a_newswire_passes():
+    research = {"companies": [_rec("NAU.V", "developments", _NEWSWIRE)]}
+    issues, _ = check_research_verification("Gold", research, ["NAU.V"])
+    assert issues == []
+
+
+def test_is_primary_source_rules():
+    assert _is_primary_source(_NEWSWIRE[0]) is True
+    assert _is_primary_source(_YAHOO[0]) is False
+    assert _is_primary_source({"url": "https://nev-gold.com/news/x", "date": "2026-08-25"}) is True
+    assert _is_primary_source({"url": "https://nev-gold.com/news/x"}) is False  # no date
+
+
+def test_synthesis_blocked_when_a_master_list_company_has_no_record():
+    """Billy's exact case: research covers a subset, all verified, synthesis must refuse."""
+    categories = {"Gold": {"research": {"companies": [_rec("OMG.V")]}},
+                  "Silver": {"research": {"companies": [_rec("SCZ.V")]}}}
+    issues, totals = check_synthesis_ready(categories, _ML)
+    assert any("NAU.V" in i and "no research record" in i for i in issues)
+    assert totals["required"] == 3 and totals["completed"] == 2
+
+
+def test_synthesis_passes_when_every_master_list_company_is_covered():
+    categories = {
+        "Gold": {"research": {"companies": [_rec("OMG.V"), _rec("NAU.V", "developments", _NEWSWIRE)]}},
+        "Silver": {"research": {"companies": [_rec("SCZ.V")]}},
+    }
+    issues, totals = check_synthesis_ready(categories, _ML)
+    assert issues == []
+    assert totals["completed"] == 3 and totals["required"] == 3
+
+
+def test_synthesis_unavailable_company_blocks_even_when_present():
+    categories = {
+        "Gold": {"research": {"companies": [_rec("OMG.V"), _rec("NAU.V", "unavailable")]}},
+        "Silver": {"research": {"companies": [_rec("SCZ.V")]}},
+    }
+    issues, _ = check_synthesis_ready(categories, _ML)
+    assert any("unavailable" in i and "NAU.V" in i for i in issues)

@@ -13,7 +13,8 @@ from src.models.config import load_settings
 
 _COLUMNS = """
     id, period_label, draft_slug, status, meta, master_list, introduction, categories,
-    synthesis, finalize_result, conversation_ids, pdf_url, created_at, updated_at
+    synthesis, finalize_result, conversation_ids, pdf_url, screener_snapshot,
+    created_at, updated_at
 """
 
 
@@ -37,6 +38,7 @@ def _row_to_dict(row) -> dict:
         "finalize_result": _decode_jsonb(row["finalize_result"]),
         "conversation_ids": _decode_jsonb(row["conversation_ids"]),
         "pdf_url": row["pdf_url"],
+        "screener_snapshot": _decode_jsonb(row["screener_snapshot"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -344,6 +346,32 @@ async def set_meta(period_label: str, draft_slug: str, meta: dict) -> dict | Non
                 period_label,
                 draft_slug,
                 json.dumps(meta),
+            )
+            return _row_to_dict(row) if row else None
+
+
+async def set_screener_snapshot(period_label: str, draft_slug: str, snapshot) -> dict | None:
+    """Store the run's single screen_tsxv50 result (gap 13, 2026-09-02). Written once in
+    Phase 1, right after the orchestrator's screen_tsxv50 call, so the master list and
+    every downstream profile table read one shared pull instead of pulling their own
+    minutes apart. Unlike set_master_list this does NOT reset finalize_result/status:
+    it is a Phase-1 write that precedes any category content, and it carries no ranking
+    that a later edit could orphan."""
+    db_url = load_settings().transaction_pooler_url
+    async with asyncpg.create_pool(
+        db_url, min_size=1, max_size=5, statement_cache_size=0
+    ) as pool:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"""
+                UPDATE public.tsxv50_report_drafts
+                SET screener_snapshot = $3, updated_at = now()
+                WHERE period_label = $1 AND draft_slug = $2
+                RETURNING {_COLUMNS}
+                """,
+                period_label,
+                draft_slug,
+                json.dumps(snapshot),
             )
             return _row_to_dict(row) if row else None
 
